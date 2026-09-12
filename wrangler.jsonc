@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tm-lt-stremio",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-12",
+
+  "d1_databases": [
+    {
+      "binding": "tm_lt_db",
+      "database_name": "tm-lt-db",
+      "database_id": "c763b8fa-0bd3-4d6f-bb47-d93f6a9b691c"
+    }
+  ],
+
+  "triggers": {
+    "crons": [
+      "0 23 * * *"
+    ]
+  }
+}
