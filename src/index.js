@@ -46,7 +46,7 @@ async function runReindexWorker(
 
   try {
     // -----------------------------------------------------
-    // 1. Láº¥y thÆ° viá»‡n Ä‘Æ°á»£c yÃªu cáº§u
+    // 1. Lấy thư viện được yêu cầu
     // -----------------------------------------------------
     const library = await env.tm_lt_db
       .prepare(
@@ -66,7 +66,7 @@ async function runReindexWorker(
             status: "error",
             reindex: "library_not_found",
             message:
-              "KhÃ´ng tÃ¬m tháº¥y thÆ° viá»‡n Google Drive Ä‘ang Ä‘Æ°á»£c báº­t"
+              "Không tìm thấy thư viện Google Drive đang được bật"
           },
           null,
           2
@@ -82,7 +82,7 @@ async function runReindexWorker(
     }
 
     // -----------------------------------------------------
-    // 2. Táº¡o job má»›i hoáº·c tiáº¿p tá»¥c job hiá»‡n táº¡i
+    // 2. Tạo job mới hoặc tiếp tục job hiện tại
     // -----------------------------------------------------
     if (existingJobId) {
       const existingJob = await env.tm_lt_db
@@ -109,7 +109,7 @@ async function runReindexWorker(
               status: "error",
               reindex: "job_not_found",
               message:
-                "KhÃ´ng tÃ¬m tháº¥y Reindex job hoáº·c job khÃ´ng thuá»™c thÆ° viá»‡n nÃ y"
+                "Không tìm thấy Reindex job hoặc job không thuộc thư viện này"
             },
             null,
             2
@@ -163,7 +163,7 @@ async function runReindexWorker(
     }
 
     // -----------------------------------------------------
-    // 3. Scan toÃ n bá»™ Google Drive
+    // 3. Scan toàn bộ Google Drive
     // -----------------------------------------------------
     const driveFiles =
       await scanDriveLibrary(
@@ -181,7 +181,7 @@ async function runReindexWorker(
       );
 
     // -----------------------------------------------------
-    // 4. Ghi tá»•ng sá»‘ file tÃ¬m tháº¥y
+    // 4. Ghi tổng số file tìm thấy
     // -----------------------------------------------------
     await env.tm_lt_db
       .prepare(
@@ -196,7 +196,7 @@ async function runReindexWorker(
       .run();
 
     // -----------------------------------------------------
-    // 5. Danh sÃ¡ch Drive ID hiá»‡n táº¡i
+    // 5. Danh sách Drive ID hiện tại
     // -----------------------------------------------------
     const currentDriveIds =
       new Set(
@@ -206,7 +206,7 @@ async function runReindexWorker(
       );
 
     // -----------------------------------------------------
-    // 6. Bá»™ Ä‘áº¿m
+    // 6. Bộ đếm
     // -----------------------------------------------------
     let filesAdded = 0;
     let filesUpdated = 0;
@@ -216,7 +216,7 @@ async function runReindexWorker(
     let errors = [];
 
     // -----------------------------------------------------
-    // Náº¿u tiáº¿p tá»¥c job cÅ© thÃ¬ láº¥y sá»‘ liá»‡u Ä‘Ã£ tÃ­ch lÅ©y
+    // Nếu tiếp tục job cũ thì lấy số liệu đã tích lũy
     // -----------------------------------------------------
     if (existingJobId) {
       const previousJob =
@@ -259,7 +259,7 @@ async function runReindexWorker(
     }
 
     // -----------------------------------------------------
-    // 7. Retry TMDB khi gáº·p lá»—i táº¡m thá»i
+    // 7. Retry TMDB khi gặp lỗi tạm thời
     // -----------------------------------------------------
     const resolveMediaWithRetry =
       async (parsed) => {
@@ -310,7 +310,7 @@ async function runReindexWorker(
       };
 
     // -----------------------------------------------------
-    // 8. Láº¥y batch hiá»‡n táº¡i
+    // 8. Lấy batch hiện tại
     // -----------------------------------------------------
     const batchFiles =
       videoFiles.slice(
@@ -321,7 +321,7 @@ async function runReindexWorker(
     for (const file of batchFiles) {
       try {
         // -------------------------------------------------
-        // Kiá»ƒm tra file Ä‘Ã£ tá»“n táº¡i trong D1 chÆ°a
+        // Kiểm tra file đã tồn tại trong D1 chưa
         // -------------------------------------------------
         const existing =
           await env.tm_lt_db
@@ -340,8 +340,8 @@ async function runReindexWorker(
             .first();
 
         // -------------------------------------------------
-// File khÃ´ng thay Ä‘á»•i -> bá» qua
-// Trá»« khi cáº§n refresh metadata
+// File không thay đổi -> bỏ qua
+// Trừ khi cần refresh metadata
 // -------------------------------------------------
 const needsMetadataRefresh =
   existing &&
@@ -374,7 +374,7 @@ if (
 }
 
         // -------------------------------------------------
-        // File má»›i hoáº·c Ä‘Ã£ thay Ä‘á»•i
+        // File mới hoặc đã thay đổi
         // -------------------------------------------------
         const parsed =
           parseFilename(file.name);
@@ -385,7 +385,7 @@ if (
           );
 
         // -------------------------------------------------
-        // KhÃ´ng tÃ¬m tháº¥y TMDB
+        // Không tìm thấy TMDB
         // -------------------------------------------------
         if (!tmdb) {
           filesFailed++;
@@ -394,7 +394,7 @@ if (
             driveFileId: file.id,
             fileName: file.name,
             error:
-              "KhÃ´ng tÃ¬m tháº¥y thÃ´ng tin TMDB"
+              "Không tìm thấy thông tin TMDB"
           });
 
           continue;
@@ -518,7 +518,7 @@ if (
           .run();
 
         // -------------------------------------------------
-        // Äáº¿m thÃªm / cáº­p nháº­t
+        // Đếm thêm / cập nhật
         // -------------------------------------------------
         if (existing) {
           filesUpdated++;
@@ -527,7 +527,7 @@ if (
         }
 
         // -------------------------------------------------
-        // Táº¡o stream náº¿u chÆ°a cÃ³
+        // Tạo stream nếu chưa có
         // -------------------------------------------------
         await env.tm_lt_db
           .prepare(
@@ -569,8 +569,8 @@ if (
     }
 
     // -----------------------------------------------------
-    // 9. ÄÃ¡nh dáº¥u movie khÃ´ng cÃ²n trÃªn Drive lÃ  inactive
-    // Chá»‰ thá»±c hiá»‡n á»Ÿ batch cuá»‘i
+    // 9. Đánh dấu movie không còn trên Drive là inactive
+    // Chỉ thực hiện ở batch cuối
     // -----------------------------------------------------
     let filesRemoved = 0;
 
@@ -616,7 +616,7 @@ if (
     }
 
     // -----------------------------------------------------
-    // 10. Cáº­p nháº­t reindex job
+    // 10. Cập nhật reindex job
     // -----------------------------------------------------
     const finalStatus =
       isLastBatch
@@ -660,7 +660,7 @@ if (
       .run();
 
     // -----------------------------------------------------
-    // 11. Káº¿t quáº£
+    // 11. Kết quả
     // -----------------------------------------------------
     const nextOffset =
       isLastBatch
@@ -720,7 +720,7 @@ const nextBatchUrl =
   } catch (error) {
 
     // -----------------------------------------------------
-    // Lá»—i toÃ n bá»™ Reindex
+    // Lỗi toàn bộ Reindex
     // -----------------------------------------------------
     if (jobId !== null) {
       try {
@@ -741,7 +741,7 @@ const nextBatchUrl =
           )
           .run();
       } catch {
-        // KhÃ´ng che máº¥t lá»—i gá»‘c
+        // Không che mất lỗi gốc
       }
     }
 
@@ -1113,7 +1113,7 @@ export default {
   <h1>VanTrung MediaHub</h1>
 
   <div class="subtitle">
-    Quáº£n lÃ½ cÃ¡c thÆ° viá»‡n Google Drive vÃ  cáº­p nháº­t catalog.
+    Quản lý các thư viện Google Drive và cập nhật catalog.
   </div>
 
   <!-- SECRET -->
@@ -1128,18 +1128,18 @@ export default {
       <input
         id="secret"
         type="password"
-        placeholder="Nháº­p REINDEX_SECRET"
+        placeholder="Nhập REINDEX_SECRET"
         autocomplete="off"
       >
 
       <button onclick="loadLibraries()">
-        Táº£i danh sÃ¡ch thÆ° viá»‡n
+        Tải danh sách thư viện
       </button>
 
     </div>
 
     <div id="authStatus" class="status auth-status">
-      ChÆ°a xÃ¡c thá»±c
+      Chưa xác thực
     </div>
 
   </div>
@@ -1150,7 +1150,7 @@ export default {
 
     <div class="section-title library-section-title">
     <div>
-        <h2>ThÆ° viá»‡n Google Drive</h2>
+        <h2>Thư viện Google Drive</h2>
         <span id="library-count" class="library-count"></span>
     </div>
 
@@ -1158,7 +1158,7 @@ export default {
         class="btn btn-primary"
         onclick="reindexAllLibraries()"
     >
-        ðŸ”„ Reindex táº¥t cáº£
+        🔄 Reindex tất cả
     </button>
 </div>
 
@@ -1169,7 +1169,7 @@ export default {
 ></div>
 
     <div id="libraries">
-      ChÆ°a táº£i danh sÃ¡ch.
+      Chưa tải danh sách.
     </div>
 
 
@@ -1179,7 +1179,7 @@ export default {
         class="secondary"
         onclick="toggleAddForm()"
       >
-        + ThÃªm thÆ° viá»‡n
+        + Thêm thư viện
       </button>
 
     </div>
@@ -1189,33 +1189,33 @@ export default {
 
     <div id="addForm" class="add-form">
 
-      <label>TÃªn thÆ° viá»‡n</label>
+      <label>Tên thư viện</label>
 
       <input
         id="libraryName"
-        placeholder="VÃ­ dá»¥: Phim Hoáº¡t HÃ¬nh"
+        placeholder="Ví dụ: Phim Hoạt Hình"
       >
 
       <label>
-        Google Drive Folder ID hoáº·c URL
+        Google Drive Folder ID hoặc URL
       </label>
 
       <input
         id="folderInput"
-        placeholder="Folder ID hoáº·c URL thÆ° má»¥c Drive"
+        placeholder="Folder ID hoặc URL thư mục Drive"
       >
 
       <div class="add-actions">
 
         <button onclick="addLibrary()">
-          LÆ°u danh sÃ¡ch
+          Lưu danh sách
         </button>
 
         <button
           class="secondary"
           onclick="toggleAddForm(false)"
         >
-          Há»§y
+          Hủy
         </button>
 
       </div>
@@ -1227,9 +1227,9 @@ export default {
 
   <div class="footer-note">
 
-    Secret chá»‰ Ä‘Æ°á»£c gá»­i qua HTTPS trong header
-    Authorization vÃ  khÃ´ng lÆ°u trÃªn trÃ¬nh duyá»‡t.
-    CÃ³ thá»ƒ dÃ¡n folder ID hoáº·c URL thÆ° má»¥c Drive.
+    Secret chỉ được gửi qua HTTPS trong header
+    Authorization và không lưu trên trình duyệt.
+    Có thể dán folder ID hoặc URL thư mục Drive.
 
   </div>
 
@@ -1254,24 +1254,24 @@ async function loadLibraries() {
     const authStatus = document.getElementById("authStatus");
 
     if (!adminSecret) {
-        authStatus.innerHTML = '<span style="color:#f87171">Vui lÃ²ng nháº­p REINDEX_SECRET</span>';
+        authStatus.innerHTML = '<span style="color:#f87171">Vui lòng nhập REINDEX_SECRET</span>';
         return;
     }
 
-    authStatus.innerHTML = 'â³ Äang xÃ¡c thá»±c...';
+    authStatus.innerHTML = '⏳ Đang xác thực...';
 
     try {
         const response = await fetch("/admin/libraries", { method: "GET", headers: getHeaders() });
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.message || "KhÃ´ng thá»ƒ táº£i thÆ° viá»‡n");
+            throw new Error(data.message || "Không thể tải thư viện");
         }
 
-        authStatus.innerHTML = '<span style="color:#4ade80">âœ“ ÄÃ£ xÃ¡c thá»±c thÃ nh cÃ´ng</span>';
+        authStatus.innerHTML = '<span style="color:#4ade80">✓ Đã xác thực thành công</span>';
         renderLibraries(data.libraries || []);
     } catch (error) {
-        authStatus.innerHTML = '<span style="color:#f87171">âœ• ' + escapeHtml(error.message) + '</span>';
+        authStatus.innerHTML = '<span style="color:#f87171">✕ ' + escapeHtml(error.message) + '</span>';
     }
 }
 
@@ -1279,27 +1279,27 @@ function renderLibraries(libraries) {
     const container = document.getElementById("libraries");
     const count = document.getElementById("libraryCount");
 
-    count.textContent = libraries.length + " thÆ° viá»‡n";
+    count.textContent = libraries.length + " thư viện";
 
     if (!libraries.length) {
-        container.innerHTML = '<div class="empty-state">ChÆ°a cÃ³ thÆ° viá»‡n.</div>';
+        container.innerHTML = '<div class="empty-state">Chưa có thư viện.</div>';
         return;
     }
 
-    // Sá»­ dá»¥ng ká»¹ thuáº­t dataset Ä‘á»ƒ KHÃ”NG cáº§n escape dáº¥u nhÃ¡y trong JavaScript
+    // Sử dụng kỹ thuật dataset để KHÔNG cần escape dấu nháy trong JavaScript
     container.innerHTML = libraries.map(function(library) {
         const id = escapeHtml(library.id);
         const name = escapeHtml(library.name);
         const folder = escapeHtml(library.folder_id);
 
         return '<div class="library-card">' +
-                 '<div class="library-header">ðŸŽ¬ ' + name + '</div>' +
+                 '<div class="library-header">🎬 ' + name + '</div>' +
                  '<div class="library-folder">Folder: ' + folder + '</div>' +
                  '<div class="library-actions">' +
                    '<button onclick="reindexLibrary(this.dataset.id)" data-id="' + id + '">Reindex</button>' +
-                   '<button class="danger" onclick="deleteLibrary(this.dataset.id)" data-id="' + id + '">XÃ³a</button>' +
+                   '<button class="danger" onclick="deleteLibrary(this.dataset.id)" data-id="' + id + '">Xóa</button>' +
                  '</div>' +
-                 '<div class="library-status" id="status-' + id + '">ChÆ°a Reindex trong phiÃªn nÃ y.</div>' +
+                 '<div class="library-status" id="status-' + id + '">Chưa Reindex trong phiên này.</div>' +
                '</div>';
     }).join("");
 }
@@ -1309,7 +1309,7 @@ async function addLibrary() {
     const folder = document.getElementById("folderInput").value.trim();
 
     if (!name || !folder) {
-        alert("Vui lÃ²ng nháº­p tÃªn thÆ° viá»‡n vÃ  Folder ID/URL.");
+        alert("Vui lòng nhập tên thư viện và Folder ID/URL.");
         return;
     }
 
@@ -1322,10 +1322,10 @@ async function addLibrary() {
 
         const data = await response.json();
         if (!response.ok) {
-            throw new Error(data.message || "KhÃ´ng thá»ƒ thÃªm thÆ° viá»‡n");
+            throw new Error(data.message || "Không thể thêm thư viện");
         }
 
-        alert("ÄÃ£ thÃªm thÆ° viá»‡n.");
+        alert("Đã thêm thư viện.");
         document.getElementById("libraryName").value = "";
         document.getElementById("folderInput").value = "";
         toggleAddForm(false);
@@ -1337,26 +1337,26 @@ async function addLibrary() {
 
 async function reindexLibrary(libraryId) {
     const statusElement = document.getElementById("status-" + libraryId);
-    statusElement.innerHTML = '<strong>â³ Äang Ä‘Æ°a Reindex vÃ o Queue...</strong>';
+    statusElement.innerHTML = '<strong>⏳ Đang đưa Reindex vào Queue...</strong>';
 
     try {
         const response = await fetch("/admin/reindex/" + libraryId, { method: "POST", headers: getHeaders() });
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.message || "KhÃ´ng thá»ƒ Reindex");
+            throw new Error(data.message || "Không thể Reindex");
         }
 
-        statusElement.innerHTML = '<strong>âœ“ ÄÃ£ Ä‘Æ°a vÃ o Queue...</strong>';
+        statusElement.innerHTML = '<strong>✓ Đã đưa vào Queue...</strong>';
         if (data.jobId) {
             startPolling(libraryId, data.jobId);
         }
     } catch (error) {
-        statusElement.innerHTML = '<strong>âœ• ' + escapeHtml(error.message) + '</strong>';
+        statusElement.innerHTML = '<strong>✕ ' + escapeHtml(error.message) + '</strong>';
     }
 }
 // ---------------------------------------------------------
-// Reindex táº¥t cáº£ thÆ° viá»‡n
+// Reindex tất cả thư viện
 // ---------------------------------------------------------
 async function reindexAllLibraries() {
     const statusElement =
@@ -1366,11 +1366,11 @@ async function reindexAllLibraries() {
         return;
     }
 
-    // Hiá»ƒn thá»‹ tráº¡ng thÃ¡i
+    // Hiển thị trạng thái
     statusElement.style.display = "block";
 
     statusElement.innerHTML =
-        '<strong>â³ Äang báº¯t Ä‘áº§u Reindex táº¥t cáº£ thÆ° viá»‡n...</strong>';
+        '<strong>⏳ Đang bắt đầu Reindex tất cả thư viện...</strong>';
 
     try {
         const response =
@@ -1388,16 +1388,16 @@ async function reindexAllLibraries() {
         if (!response.ok) {
             throw new Error(
                 data.message ||
-                "KhÃ´ng thá»ƒ báº¯t Ä‘áº§u Reindex táº¥t cáº£"
+                "Không thể bắt đầu Reindex tất cả"
             );
         }
 
         statusElement.innerHTML =
-            "<strong>âœ“ ÄÃ£ Ä‘Æ°a Reindex táº¥t cáº£ vÃ o Queue.</strong>" +
+            "<strong>✓ Đã đưa Reindex tất cả vào Queue.</strong>" +
             "<br>" +
-            "Äang xá»­ lÃ½ thÆ° viá»‡n Ä‘áº§u tiÃªn...";
+            "Đang xử lý thư viện đầu tiên...";
 
-        // Báº¯t Ä‘áº§u theo dÃµi tiáº¿n Ä‘á»™
+        // Bắt đầu theo dõi tiến độ
         if (
             data.totalLibraries &&
             data.totalLibraries > 0
@@ -1411,7 +1411,7 @@ async function reindexAllLibraries() {
     } catch (error) {
 
         statusElement.innerHTML =
-            "<strong>âœ• " +
+            "<strong>✕ " +
             escapeHtml(
                 error.message
             ) +
@@ -1433,29 +1433,29 @@ async function checkJobStatus(libraryId, jobId) {
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.message || "KhÃ´ng láº¥y Ä‘Æ°á»£c tráº¡ng thÃ¡i");
+            throw new Error(data.message || "Không lấy được trạng thái");
         }
 
         const job = data.job;
         let html = "";
 
         if (job.status === "running") {
-            html += '<strong>âŸ³ Äang Reindex...</strong>';
+            html += '<strong>⟳ Đang Reindex...</strong>';
         } else if (job.status === "completed") {
-            html += '<strong style="color:#4ade80">âœ“ HoÃ n táº¥t</strong>';
+            html += '<strong style="color:#4ade80">✓ Hoàn tất</strong>';
         } else if (job.status === "completed_with_errors") {
-            html += '<strong style="color:#fbbf24">âš  HoÃ n táº¥t nhÆ°ng cÃ³ lá»—i</strong>';
+            html += '<strong style="color:#fbbf24">⚠ Hoàn tất nhưng có lỗi</strong>';
         } else if (job.status === "failed") {
-            html += '<strong style="color:#f87171">âœ• Tháº¥t báº¡i</strong>';
+            html += '<strong style="color:#f87171">✕ Thất bại</strong>';
         } else {
             html += '<strong>' + escapeHtml(job.status) + '</strong>';
         }
 
         html += "<br>Job ID: " + job.id + "<br>";
-        html += "Files tÃ¬m tháº¥y: " + (job.files_found ?? 0) + "<br>";
-        html += "ThÃªm má»›i: " + (job.files_added ?? 0) + "<br>";
-        html += "Cáº­p nháº­t: " + (job.files_updated ?? 0) + "<br>";
-        html += "XÃ³a/ngá»«ng hoáº¡t Ä‘á»™ng: " + (job.files_removed ?? 0);
+        html += "Files tìm thấy: " + (job.files_found ?? 0) + "<br>";
+        html += "Thêm mới: " + (job.files_added ?? 0) + "<br>";
+        html += "Cập nhật: " + (job.files_updated ?? 0) + "<br>";
+        html += "Xóa/ngừng hoạt động: " + (job.files_removed ?? 0);
 
         if (job.error_message) {
             html += "<br><span style='color:#f87171'>" + escapeHtml(job.error_message) + "</span>";
@@ -1468,12 +1468,12 @@ async function checkJobStatus(libraryId, jobId) {
             delete pollTimers[libraryId];
         }
     } catch (error) {
-        statusElement.innerHTML = '<strong>âœ• ' + escapeHtml(error.message) + '</strong>';
+        statusElement.innerHTML = '<strong>✕ ' + escapeHtml(error.message) + '</strong>';
     }
 }
 
 async function deleteLibrary(libraryId) {
-    if (!confirm("Báº¡n cÃ³ cháº¯c muá»‘n xÃ³a thÆ° viá»‡n nÃ y?")) {
+    if (!confirm("Bạn có chắc muốn xóa thư viện này?")) {
         return;
     }
 
@@ -1482,10 +1482,10 @@ async function deleteLibrary(libraryId) {
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.message || "KhÃ´ng thá»ƒ xÃ³a thÆ° viá»‡n");
+            throw new Error(data.message || "Không thể xóa thư viện");
         }
 
-        alert("ÄÃ£ xÃ³a thÆ° viá»‡n.");
+        alert("Đã xóa thư viện.");
         await loadLibraries();
     } catch (error) {
         alert(error.message);
@@ -1517,10 +1517,10 @@ function escapeHtml(value) {
     }
 
     // ---------------------------------------------------------
-    // Admin - Quáº£n lÃ½ thÆ° viá»‡n
+    // Admin - Quản lý thư viện
     // ---------------------------------------------------------
     // ---------------------------------------------------------
-    // Admin - Quáº£n lÃ½ thÆ° viá»‡n
+    // Admin - Quản lý thư viện
     // ---------------------------------------------------------
 
     // GET /admin/libraries
@@ -1539,7 +1539,7 @@ function escapeHtml(value) {
       return addLibrary(request, env);
     }
 // ---------------------------------------------------------
-// Admin - Tráº¡ng thÃ¡i Reindex táº¥t cáº£
+// Admin - Trạng thái Reindex tất cả
 // GET /admin/reindex-all/status?libraries=1,2,3
 // ---------------------------------------------------------
 if (
@@ -1547,7 +1547,7 @@ if (
   request.method === "GET"
 ) {
   // -------------------------------------------------------
-  // Kiá»ƒm tra secret
+  // Kiểm tra secret
   // -------------------------------------------------------
   const authorization =
     request.headers.get("Authorization");
@@ -1592,7 +1592,7 @@ if (
   }
 
   // -------------------------------------------------------
-  // Láº¥y danh sÃ¡ch library ID
+  // Lấy danh sách library ID
   // -------------------------------------------------------
   const librariesParam =
     url.searchParams.get("libraries") || "";
@@ -1612,7 +1612,7 @@ if (
       JSON.stringify({
         status: "error",
         message:
-          "Thiáº¿u danh sÃ¡ch library ID"
+          "Thiếu danh sách library ID"
       }),
       {
         status: 400,
@@ -1625,7 +1625,7 @@ if (
   }
 
   // -------------------------------------------------------
-  // Láº¥y thÃ´ng tin thÆ° viá»‡n
+  // Lấy thông tin thư viện
   // -------------------------------------------------------
   const placeholders =
     libraryIds
@@ -1651,7 +1651,7 @@ if (
     librariesResult.results || [];
 
   // -------------------------------------------------------
-  // Láº¥y Job má»›i nháº¥t cá»§a tá»«ng thÆ° viá»‡n
+  // Lấy Job mới nhất của từng thư viện
   // -------------------------------------------------------
   const items = [];
 
@@ -1694,7 +1694,7 @@ if (
   }
 
   // -------------------------------------------------------
-  // TÃ­nh tiáº¿n Ä‘á»™
+  // Tính tiến độ
   // -------------------------------------------------------
   const total =
     items.length;
@@ -1759,7 +1759,7 @@ if (
   }
 
   // -------------------------------------------------------
-  // Náº¿u táº¥t cáº£ Ä‘Ã£ hoÃ n táº¥t
+  // Nếu tất cả đã hoàn tất
   // -------------------------------------------------------
   if (
     completed === total &&
@@ -1771,7 +1771,7 @@ if (
   }
 
   // -------------------------------------------------------
-  // Tráº£ káº¿t quáº£
+  // Trả kết quả
   // -------------------------------------------------------
   return new Response(
     JSON.stringify({
@@ -1813,7 +1813,7 @@ if (
 }
     // DELETE /admin/libraries/:id
     // ---------------------------------------------------------
-    // Admin - Reindex thÆ° viá»‡n
+    // Admin - Reindex thư viện
     // ---------------------------------------------------------
 // GET /admin/reindex/status/:jobId
 if (
@@ -1873,7 +1873,7 @@ if (
     return new Response(
       JSON.stringify({
         status: "error",
-        message: "Job ID khÃ´ng há»£p lá»‡"
+        message: "Job ID không hợp lệ"
       }),
       {
         status: 400,
@@ -1910,7 +1910,7 @@ if (
     return new Response(
       JSON.stringify({
         status: "error",
-        message: "KhÃ´ng tÃ¬m tháº¥y Reindex job"
+        message: "Không tìm thấy Reindex job"
       }),
       {
         status: 404,
@@ -1938,7 +1938,7 @@ if (
 }
 
 // ---------------------------------------------------------
-// Admin - Reindex táº¥t cáº£ thÆ° viá»‡n
+// Admin - Reindex tất cả thư viện
 // POST /admin/reindex-all
 // ---------------------------------------------------------
 if (
@@ -1946,7 +1946,7 @@ if (
   request.method === "POST"
 ) {
   // -------------------------------------------------------
-  // Kiá»ƒm tra secret
+  // Kiểm tra secret
   // -------------------------------------------------------
   const authorization =
     request.headers.get("Authorization");
@@ -1991,7 +1991,7 @@ if (
   }
 
   // -------------------------------------------------------
-  // Láº¥y toÃ n bá»™ thÆ° viá»‡n Ä‘ang Ä‘Æ°á»£c báº­t
+  // Lấy toàn bộ thư viện đang được bật
   // -------------------------------------------------------
   const libraries =
     await env.tm_lt_db
@@ -2014,7 +2014,7 @@ if (
       JSON.stringify({
         status: "error",
         message:
-          "KhÃ´ng cÃ³ thÆ° viá»‡n nÃ o Ä‘ang Ä‘Æ°á»£c báº­t"
+          "Không có thư viện nào đang được bật"
       }),
       {
         status: 400,
@@ -2027,13 +2027,13 @@ if (
   }
 
   // -------------------------------------------------------
-  // Láº¥y thÆ° viá»‡n Ä‘áº§u tiÃªn
+  // Lấy thư viện đầu tiên
   // -------------------------------------------------------
   const firstLibrary =
     libraryList[0];
 
   // -------------------------------------------------------
-  // Táº¡o Reindex Job cho thÆ° viá»‡n Ä‘áº§u tiÃªn
+  // Tạo Reindex Job cho thư viện đầu tiên
   // -------------------------------------------------------
   const jobResult =
     await env.tm_lt_db
@@ -2069,7 +2069,7 @@ if (
       JSON.stringify({
         status: "error",
         message:
-          "KhÃ´ng táº¡o Ä‘Æ°á»£c Reindex Job"
+          "Không tạo được Reindex Job"
       }),
       {
         status: 500,
@@ -2082,7 +2082,7 @@ if (
   }
 
   // -------------------------------------------------------
-  // ÄÆ°a thÆ° viá»‡n Ä‘áº§u tiÃªn vÃ o Queue
+  // Đưa thư viện đầu tiên vào Queue
   // -------------------------------------------------------
   await env.tm_lt_reindex.send({
     reindexAll: true,
@@ -2105,13 +2105,13 @@ if (
   });
 
   // -------------------------------------------------------
-  // Tráº£ káº¿t quáº£
+  // Trả kết quả
   // -------------------------------------------------------
   return new Response(
     JSON.stringify({
       status: "queued",
       message:
-        "ÄÃ£ báº¯t Ä‘áº§u Reindex táº¥t cáº£ thÆ° viá»‡n",
+        "Đã bắt đầu Reindex tất cả thư viện",
       totalLibraries:
         libraryList.length,
       currentLibrary: {
@@ -2165,7 +2165,7 @@ if (
           url.searchParams.get("jobId") || 0
         ) || null;
 
-      // Kiá»ƒm tra secret
+      // Kiểm tra secret
       const authorization =
         request.headers.get("Authorization");
 
@@ -2214,7 +2214,7 @@ if (
         return new Response(
           JSON.stringify({
             status: "error",
-            message: "Library ID khÃ´ng há»£p lá»‡"
+            message: "Library ID không hợp lệ"
           }),
           {
             status: 400,
@@ -2243,7 +2243,7 @@ if (
           JSON.stringify({
             status: "error",
             message:
-              "KhÃ´ng tÃ¬m tháº¥y thÆ° viá»‡n hoáº·c thÆ° viá»‡n Ä‘ang táº¯t"
+              "Không tìm thấy thư viện hoặc thư viện đang tắt"
           }),
           {
             status: 404,
@@ -2255,7 +2255,7 @@ if (
         );
       }
         // ---------------------------------------------------------
-      // Táº¡o Reindex Job trÆ°á»›c khi Ä‘Æ°a vÃ o Queue
+      // Tạo Reindex Job trước khi đưa vào Queue
       // ---------------------------------------------------------
 
       let jobId = existingJobId;
@@ -2286,7 +2286,7 @@ if (
         return new Response(
           JSON.stringify({
             status: "error",
-            message: "KhÃ´ng táº¡o Ä‘Æ°á»£c Reindex Job"
+            message: "Không tạo được Reindex Job"
           }),
           {
             status: 500,
@@ -2299,7 +2299,7 @@ if (
       }
 
       // ---------------------------------------------------------
-      // ÄÆ°a Job vÃ o Queue
+      // Đưa Job vào Queue
       // ---------------------------------------------------------
 
       await env.tm_lt_reindex.send({
@@ -2312,7 +2312,7 @@ if (
       return new Response(
         JSON.stringify({
           status: "queued",
-          message: "ÄÃ£ Ä‘Æ°a yÃªu cáº§u Reindex vÃ o Queue",
+          message: "Đã đưa yêu cầu Reindex vào Queue",
           libraryId: library.id,
           offset,
           batchSize,
@@ -2357,7 +2357,7 @@ if (
     if (url.pathname === "/") {
       return new Response(
         JSON.stringify({
-          name: "Kho Phim Gia ÄÃ¬nh",
+          name: "Kho Phim Gia Đình",
           status: "ok",
           version: "0.2.0"
         }, null, 2),
@@ -2516,7 +2516,7 @@ const files =
             JSON.stringify({
               status: "error",
               tmdb: "api_key_missing",
-              message: "TMDB_API_KEY chÆ°a Ä‘Æ°á»£c khai bÃ¡o"
+              message: "TMDB_API_KEY chưa được khai báo"
             }, null, 2),
             {
               status: 500,
@@ -2633,7 +2633,7 @@ if (url.pathname === "/test/tmdb/movie") {
         JSON.stringify({
           status: "error",
           message:
-            "Vui lÃ²ng truyá»n TMDB movie ID há»£p lá»‡. VÃ­ dá»¥: ?id=672"
+            "Vui lòng truyền TMDB movie ID hợp lệ. Ví dụ: ?id=672"
         }, null, 2),
         {
           status: 400,
@@ -2876,7 +2876,7 @@ if (url.pathname === "/test/tmdb/episode") {
         JSON.stringify({
           status: "error",
           message:
-            "Tham sá»‘ khÃ´ng há»£p lá»‡. VÃ­ dá»¥: ?tvId=276501&season=1&episode=1"
+            "Tham số không hợp lệ. Ví dụ: ?tvId=276501&season=1&episode=1"
         }, null, 2),
         {
           status: 400,
@@ -2970,7 +2970,7 @@ if (url.pathname === "/test/tmdb/episode") {
         JSON.stringify({
           status: "error",
           message:
-            "Tham sá»‘ khÃ´ng há»£p lá»‡. VÃ­ dá»¥: ?tvId=276501&season=1&episode=1"
+            "Tham số không hợp lệ. Ví dụ: ?tvId=276501&season=1&episode=1"
         }, null, 2),
         {
           status: 400,
@@ -3046,7 +3046,7 @@ if (url.pathname === "/test/tmdb/resolve") {
 
     // -----------------------------------------------------
     // 1. Test TV theo TMDB ID
-    // VÃ­ dá»¥:
+    // Ví dụ:
     // /test/tmdb/resolve?type=tv&id=276501
     // -----------------------------------------------------
     if (testType === "tv" && testId) {
@@ -3084,7 +3084,7 @@ if (url.pathname === "/test/tmdb/resolve") {
 
     // -----------------------------------------------------
     // 2. Test Movie theo TMDB ID
-    // VÃ­ dá»¥:
+    // Ví dụ:
     // /test/tmdb/resolve?type=movie&id=315162
     // -----------------------------------------------------
     if (testType === "movie" && testId) {
@@ -3122,7 +3122,7 @@ if (url.pathname === "/test/tmdb/resolve") {
 
     // -----------------------------------------------------
     // 3. Test TV theo TITLE + YEAR
-    // VÃ­ dá»¥:
+    // Ví dụ:
     // /test/tmdb/resolve?type=tv&title=The%20Secret%20Lives%20of%20Animals&year=2024
     // -----------------------------------------------------
     if (
@@ -3227,7 +3227,7 @@ if (url.pathname === "/test/tmdb/resolve") {
     }
 
     // -----------------------------------------------------
-    // 5. KhÃ´ng truyá»n tham sá»‘ â†’ giá»¯ test máº«u
+    // 5. Không truyền tham số → giữ test mẫu
     // -----------------------------------------------------
     const movie = await resolveMovie(
       {
@@ -3467,8 +3467,8 @@ if (url.pathname === "/test/drive/tmdb/all") {
 }
     // ---------------------------------------------------------
     // Test Google Drive -> Parser -> TMDB
-    // Chá»‰ test 10 file Ä‘áº§u tiÃªn
-    // KhÃ´ng ghi vÃ o D1
+    // Chỉ test 10 file đầu tiên
+    // Không ghi vào D1
     // ---------------------------------------------------------
     if (url.pathname === "/test/drive/tmdb") {
       try {
@@ -3491,7 +3491,7 @@ if (url.pathname === "/test/drive/tmdb/all") {
               []
             );
 
-        // 2. Lá»c file video
+        // 2. Lọc file video
         const videoFiles = files.filter((file) => {
           return (
             file?.mimeType?.startsWith("video/") ||
@@ -3501,7 +3501,7 @@ if (url.pathname === "/test/drive/tmdb/all") {
           );
         });
 
-        // 3. Chá»‰ test 10 file Ä‘áº§u tiÃªn
+        // 3. Chỉ test 10 file đầu tiên
         const testFiles = videoFiles;
 
         const results = [];
@@ -3600,7 +3600,7 @@ if (url.pathname === "/test/drive/tmdb/all") {
           }
         }
 
-        // 5. Tá»•ng káº¿t
+        // 5. Tổng kết
         const success = results.filter(
           (item) => item.status === "ok"
         ).length;
@@ -3659,8 +3659,8 @@ if (url.pathname === "/test/drive/tmdb/all") {
       }
     }
 // ---------------------------------------------------------
-// Tá»± Ä‘á»™ng refresh rating toÃ n bá»™ phim
-// TrÃ¬nh duyá»‡t tá»± cháº¡y tá»«ng batch 5 phim
+// Tự động refresh rating toàn bộ phim
+// Trình duyệt tự chạy từng batch 5 phim
 // ---------------------------------------------------------
 if (url.pathname === "/test/refresh-ratings-all") {
   const html = `
@@ -3705,10 +3705,10 @@ if (url.pathname === "/test/refresh-ratings-all") {
 
 <body>
 
-<h1>TM-LT - Cáº­p nháº­t Rating</h1>
+<h1>TM-LT - Cập nhật Rating</h1>
 
 <div id="status">
-Äang chuáº©n bá»‹...
+Đang chuẩn bị...
 </div>
 
 <div id="log"></div>
@@ -3733,14 +3733,14 @@ async function refreshAllRatings() {
   try {
     while (true) {
       status.textContent =
-        "Äang xá»­ lÃ½...\\\\n" +
+        "Đang xử lý...\\\\n" +
         "Offset: " + offset + "\\\\n" +
-        "ÄÃ£ xá»­ lÃ½: " + totalProcessed + " phim\\\\n" +
-        "ÄÃ£ cáº­p nháº­t: " + totalUpdated + " phim\\\\n" +
-        "Lá»—i: " + totalFailed;
+        "Đã xử lý: " + totalProcessed + " phim\\\\n" +
+        "Đã cập nhật: " + totalUpdated + " phim\\\\n" +
+        "Lỗi: " + totalFailed;
 
       writeLog(
-        "â†’ Äang xá»­ lÃ½ offset " +
+        "→ Đang xử lý offset " +
         offset +
         "..."
       );
@@ -3762,7 +3762,7 @@ async function refreshAllRatings() {
 
       if (data.status !== "ok") {
         throw new Error(
-          data.message || "Batch tháº¥t báº¡i"
+          data.message || "Batch thất bại"
         );
       }
 
@@ -3771,13 +3771,13 @@ async function refreshAllRatings() {
       totalFailed += data.failed || 0;
 
       writeLog(
-        "âœ“ Offset " +
+        "✓ Offset " +
         offset +
         ": " +
         data.updated +
         "/" +
         data.processed +
-        " cáº­p nháº­t, lá»—i " +
+        " cập nhật, lỗi " +
         data.failed
       );
 
@@ -3787,7 +3787,7 @@ async function refreshAllRatings() {
       ) {
         for (const error of data.errors) {
           writeLog(
-            "  âœ— " +
+            "  ✗ " +
             error.title +
             " - " +
             error.error
@@ -3804,48 +3804,48 @@ async function refreshAllRatings() {
 
       offset = data.nextOffset;
 
-      // Nghá»‰ 300ms giá»¯a cÃ¡c batch
+      // Nghỉ 300ms giữa các batch
       await new Promise(
         resolve => setTimeout(resolve, 300)
       );
     }
 
     status.textContent =
-      "HOÃ€N Táº¤T!\\\\n\\\\n" +
-      "ÄÃ£ xá»­ lÃ½: " +
+      "HOÀN TẤT!\\\\n\\\\n" +
+      "Đã xử lý: " +
       totalProcessed +
       " phim\\\\n" +
-      "ÄÃ£ cáº­p nháº­t: " +
+      "Đã cập nhật: " +
       totalUpdated +
       " phim\\\\n" +
-      "Lá»—i: " +
+      "Lỗi: " +
       totalFailed +
       " phim";
 
     writeLog("");
     writeLog("================================");
-    writeLog("HOÃ€N Táº¤T");
+    writeLog("HOÀN TẤT");
     writeLog(
-      "Tá»•ng xá»­ lÃ½: " +
+      "Tổng xử lý: " +
       totalProcessed
     );
     writeLog(
-      "Tá»•ng cáº­p nháº­t: " +
+      "Tổng cập nhật: " +
       totalUpdated
     );
     writeLog(
-      "Tá»•ng lá»—i: " +
+      "Tổng lỗi: " +
       totalFailed
     );
     writeLog("================================");
 
   } catch (error) {
     status.textContent =
-      "CÃ“ Lá»–I: " +
+      "CÓ LỖI: " +
       error.message;
 
     writeLog(
-      "âœ— Lá»–I: " +
+      "✗ LỖI: " +
       error.message
     );
   }
@@ -3867,7 +3867,7 @@ refreshAllRatings();
 }
 // ---------------------------------------------------------
 // Test refresh TMDB rating -> D1
-// Má»—i láº§n cáº­p nháº­t tá»‘i Ä‘a 5 phim
+// Mỗi lần cập nhật tối đa 5 phim
 // ---------------------------------------------------------
 if (url.pathname === "/test/refresh-ratings") {
   try {
@@ -3923,7 +3923,7 @@ if (url.pathname === "/test/refresh-ratings") {
             id: movie.id,
             title: movie.title,
             tmdbId: movie.tmdb_id,
-            error: "KhÃ´ng láº¥y Ä‘Æ°á»£c voteAverage tá»« TMDB"
+            error: "Không lấy được voteAverage từ TMDB"
           });
 
           continue;
@@ -4017,7 +4017,7 @@ if (url.pathname === "/test/refresh-ratings") {
 
 // ---------------------------------------------------------
 // Test Reindex Google Drive -> Parser -> TMDB -> D1
-// Chá»‰ xá»­ lÃ½ file má»›i hoáº·c file Ä‘Ã£ thay Ä‘á»•i
+// Chỉ xử lý file mới hoặc file đã thay đổi
 // ---------------------------------------------------------
 if (url.pathname === "/test/reindex") {
   let jobId = null;
@@ -4025,7 +4025,7 @@ if (url.pathname === "/test/reindex") {
   try {
     // -----------------------------------------------------
     // Batch Reindex
-    // Máº·c Ä‘á»‹nh má»—i láº§n xá»­ lÃ½ 5 file
+    // Mặc định mỗi lần xử lý 5 file
     // -----------------------------------------------------
     const offset = Math.max(
       0,
@@ -4043,7 +4043,7 @@ if (url.pathname === "/test/reindex") {
     const existingJobId =
       Number(url.searchParams.get("jobId") || 0) || null;
         // -----------------------------------------------------
-        // 1. Láº¥y thÆ° viá»‡n Ä‘ang báº­t
+        // 1. Lấy thư viện đang bật
         // -----------------------------------------------------
         const library = await env.tm_lt_db
           .prepare(
@@ -4062,7 +4062,7 @@ if (url.pathname === "/test/reindex") {
                 status: "error",
                 reindex: "library_not_found",
                 message:
-                  "KhÃ´ng tÃ¬m tháº¥y thÆ° viá»‡n Google Drive Ä‘ang Ä‘Æ°á»£c báº­t"
+                  "Không tìm thấy thư viện Google Drive đang được bật"
               },
               null,
               2
@@ -4078,7 +4078,7 @@ if (url.pathname === "/test/reindex") {
         }
 
         // -----------------------------------------------------
-// 2. Táº¡o job má»›i hoáº·c tiáº¿p tá»¥c job hiá»‡n táº¡i
+// 2. Tạo job mới hoặc tiếp tục job hiện tại
 // -----------------------------------------------------
 if (existingJobId) {
   jobId = existingJobId;
@@ -4101,7 +4101,7 @@ if (existingJobId) {
     job.meta?.last_row_id ?? null;
 }
         // -----------------------------------------------------
-        // 3. Scan toÃ n bá»™ Google Drive
+        // 3. Scan toàn bộ Google Drive
         // -----------------------------------------------------
         const driveFiles =
           await scanDriveLibrary(
@@ -4132,7 +4132,7 @@ if (existingJobId) {
           .run();
 
         // -----------------------------------------------------
-        // 4. Danh sÃ¡ch Drive ID hiá»‡n táº¡i
+        // 4. Danh sách Drive ID hiện tại
         // -----------------------------------------------------
         const currentDriveIds =
           new Set(
@@ -4142,7 +4142,7 @@ if (existingJobId) {
           );
 
         // -----------------------------------------------------
-// 5. Bá»™ Ä‘áº¿m
+// 5. Bộ đếm
 // -----------------------------------------------------
 let filesAdded = 0;
 let filesUpdated = 0;
@@ -4152,7 +4152,7 @@ let filesFailed = 0;
 let errors = [];
 
 // -----------------------------------------------------
-// Náº¿u tiáº¿p tá»¥c job cÅ© thÃ¬ láº¥y sá»‘ liá»‡u Ä‘Ã£ tÃ­ch lÅ©y
+// Nếu tiếp tục job cũ thì lấy số liệu đã tích lũy
 // -----------------------------------------------------
 if (existingJobId) {
   const previousJob =
@@ -4191,10 +4191,10 @@ if (existingJobId) {
 }
 
         // -----------------------------------------------------
-        // 6. Xá»­ lÃ½ tá»«ng file
+        // 6. Xử lý từng file
         // -----------------------------------------------------
                 // -----------------------------------------------------
-        // Retry TMDB khi gáº·p lá»—i táº¡m thá»i
+        // Retry TMDB khi gặp lỗi tạm thời
         // -----------------------------------------------------
         const resolveMediaWithRetry =
           async (parsed) => {
@@ -4220,22 +4220,22 @@ if (existingJobId) {
                     message
                   );
 
-                // KhÃ´ng pháº£i lá»—i táº¡m thá»i
-                // thÃ¬ khÃ´ng retry
+                // Không phải lỗi tạm thời
+                // thì không retry
                 if (!isTransient) {
                   throw error;
                 }
 
-                // ÄÃ£ háº¿t sá»‘ láº§n thá»­
+                // Đã hết số lần thử
                 if (
                   attempt === maxAttempts
                 ) {
                   throw error;
                 }
 
-                // Chá» tÄƒng dáº§n:
-                // láº§n 1 -> 1 giÃ¢y
-                // láº§n 2 -> 2 giÃ¢y
+                // Chờ tăng dần:
+                // lần 1 -> 1 giây
+                // lần 2 -> 2 giây
                 await new Promise(
                   (resolve) =>
                     setTimeout(
@@ -4250,7 +4250,7 @@ if (existingJobId) {
           };
 
         // -----------------------------------------------------
-        // 6. Xá»­ lÃ½ tá»«ng file
+        // 6. Xử lý từng file
         // -----------------------------------------------------
 	const batchFiles =
   videoFiles.slice(
@@ -4261,7 +4261,7 @@ if (existingJobId) {
 for (const file of batchFiles) {
           try {
             // -------------------------------------------------
-            // Kiá»ƒm tra file Ä‘Ã£ tá»“n táº¡i trong D1 chÆ°a
+            // Kiểm tra file đã tồn tại trong D1 chưa
             // -------------------------------------------------
             const existing =
               await env.tm_lt_db
@@ -4279,8 +4279,8 @@ for (const file of batchFiles) {
                 .first();
 
             // -------------------------------------------------
-            // Náº¿u file Ä‘Ã£ tá»“n táº¡i vÃ  khÃ´ng thay Ä‘á»•i:
-            // Bá»Ž QUA, khÃ´ng gá»i Parser, khÃ´ng gá»i TMDB
+            // Nếu file đã tồn tại và không thay đổi:
+            // BỎ QUA, không gọi Parser, không gọi TMDB
             // -------------------------------------------------
             if (
               existing &&
@@ -4288,8 +4288,8 @@ for (const file of batchFiles) {
               (existing.drive_modified_time ?? null) ===
                 (file.modifiedTime ?? null)
             ) {
-              // Náº¿u trÆ°á»›c Ä‘Ã³ bá»‹ inactive nhÆ°ng hiá»‡n Ä‘Ã£ quay láº¡i
-              // thÃ¬ chá»‰ cáº§n kÃ­ch hoáº¡t láº¡i.
+              // Nếu trước đó bị inactive nhưng hiện đã quay lại
+              // thì chỉ cần kích hoạt lại.
               if (existing.is_active !== 1) {
                 await env.tm_lt_db
                   .prepare(
@@ -4307,7 +4307,7 @@ for (const file of batchFiles) {
             }
 
             // -------------------------------------------------
-            // File má»›i hoáº·c file Ä‘Ã£ thay Ä‘á»•i
+            // File mới hoặc file đã thay đổi
             // -------------------------------------------------
             const parsed =
               parseFilename(file.name);
@@ -4318,7 +4318,7 @@ for (const file of batchFiles) {
               );
 
             // -------------------------------------------------
-            // KhÃ´ng tÃ¬m tháº¥y TMDB
+            // Không tìm thấy TMDB
             // -------------------------------------------------
             if (!tmdb) {
               filesFailed++;
@@ -4327,7 +4327,7 @@ for (const file of batchFiles) {
                 driveFileId: file.id,
                 fileName: file.name,
                 error:
-                  "KhÃ´ng tÃ¬m tháº¥y thÃ´ng tin TMDB"
+                  "Không tìm thấy thông tin TMDB"
               });
 
               continue;
@@ -4446,7 +4446,7 @@ DO UPDATE SET
 .run();
 
             // -------------------------------------------------
-            // Äáº¿m thÃªm / cáº­p nháº­t
+            // Đếm thêm / cập nhật
             // -------------------------------------------------
             if (existing) {
               filesUpdated++;
@@ -4455,7 +4455,7 @@ DO UPDATE SET
             }
 
             // -------------------------------------------------
-            // Táº¡o stream náº¿u chÆ°a cÃ³
+            // Tạo stream nếu chưa có
             // -------------------------------------------------
             await env.tm_lt_db
               .prepare(
@@ -4485,7 +4485,7 @@ DO UPDATE SET
 
           } catch (fileError) {
             // -------------------------------------------------
-            // Lá»—i má»™t file khÃ´ng lÃ m dá»«ng toÃ n bá»™ Reindex
+            // Lỗi một file không làm dừng toàn bộ Reindex
             // -------------------------------------------------
             filesFailed++;
 
@@ -4500,8 +4500,8 @@ DO UPDATE SET
         }
 
  // -----------------------------------------------------
-// 7. ÄÃ¡nh dáº¥u movie khÃ´ng cÃ²n trÃªn Drive lÃ  inactive
-// Chá»‰ thá»±c hiá»‡n khi Ä‘Ã£ xá»­ lÃ½ batch cuá»‘i cÃ¹ng
+// 7. Đánh dấu movie không còn trên Drive là inactive
+// Chỉ thực hiện khi đã xử lý batch cuối cùng
 // -----------------------------------------------------
 let filesRemoved = 0;
 
@@ -4546,7 +4546,7 @@ if (isLastBatch) {
 }
 
 // -----------------------------------------------------
-// 9. Cáº­p nháº­t reindex job
+// 9. Cập nhật reindex job
 // -----------------------------------------------------
 const finalStatus =
   isLastBatch
@@ -4590,7 +4590,7 @@ await env.tm_lt_db
   .run();
 
         // -----------------------------------------------------
-        // 10. Káº¿t quáº£
+        // 10. Kết quả
         // -----------------------------------------------------
         return new Response(
           JSON.stringify(
@@ -4644,7 +4644,7 @@ nextBatchUrl:
       } catch (error) {
 
         // -----------------------------------------------------
-        // Lá»—i toÃ n bá»™ Reindex
+        // Lỗi toàn bộ Reindex
         // -----------------------------------------------------
         if (jobId !== null) {
           try {
@@ -4665,7 +4665,7 @@ nextBatchUrl:
               )
               .run();
           } catch {
-            // KhÃ´ng che máº¥t lá»—i gá»‘c
+            // Không che mất lỗi gốc
           }
         }
 
@@ -4697,15 +4697,15 @@ nextBatchUrl:
 
     // ---------------------------------------------------------
         // ---------------------------------------------------------
-    // Stremio Catalog - Kho Phim Gia ÄÃ¬nh
+    // Stremio Catalog - Kho Phim Gia Đình
     // ---------------------------------------------------------
     // ---------------------------------------------------------
 // Stremio Catalogs
-// 4 danh má»¥c:
-// 1. Táº¥t cáº£ phim
+// 4 danh mục:
+// 1. Tất cả phim
 // 2. A -> Z
-// 3. Má»›i nháº¥t
-// 4. Äiá»ƒm cao
+// 3. Mới nhất
+// 4. Điểm cao
 // ---------------------------------------------------------
 const catalogMatch =
   url.pathname.match(
@@ -4772,7 +4772,7 @@ if (catalogMatch) {
 
               name:
                 movie.title ||
-                "KhÃ´ng cÃ³ tÃªn",
+                "Không có tên",
 
               releaseInfo:
                 movie.year
@@ -5144,7 +5144,7 @@ if (url.pathname.startsWith("/meta/series/")) {
   }
 }
     // ---------------------------------------------------------
-    // Stremio Meta - Chi tiáº¿t phim
+    // Stremio Meta - Chi tiết phim
     // ---------------------------------------------------------
     if (url.pathname.startsWith("/meta/movie/")) {
       try {
@@ -5216,7 +5216,7 @@ if (url.pathname.startsWith("/meta/series/")) {
                 type: "movie",
                 name:
                   movie.title ||
-                  "KhÃ´ng cÃ³ tÃªn",
+                  "Không có tên",
                 releaseInfo:
                   movie.year
                     ? String(movie.year)
@@ -5560,29 +5560,29 @@ if (url.pathname.startsWith("/stream/movie/")) {
           "";
 
 // ---------------------------------------------------------
-// Nháº­n diá»‡n phiÃªn báº£n + cháº¥t lÆ°á»£ng tá»« tÃªn file
+// Nhận diện phiên bản + chất lượng từ tên file
 // ---------------------------------------------------------
 
 let languageLabel =
-  "ðŸŽ§ Ã‚m thanh gá»‘c";
+  "🎧 Âm thanh gốc";
 
-// Thuyáº¿t minh
+// Thuyết minh
 if (
   /thuyet[\s._-]*minh/i.test(fileName) ||
-  /thuyáº¿t[\s._-]*minh/i.test(fileName)
+  /thuyết[\s._-]*minh/i.test(fileName)
 ) {
   languageLabel =
-    "ðŸ‡»ðŸ‡³ Thuyáº¿t minh";
+    "🇻🇳 Thuyết minh";
 
-// Phá»¥ Ä‘á» Viá»‡t
+// Phụ đề Việt
 } else if (
   /viet[\s._-]*sub/i.test(fileName) ||
   /vietsub/i.test(fileName) ||
   /phu[\s._-]*de/i.test(fileName) ||
-  /phá»¥[\s._-]*Ä‘á»/i.test(fileName)
+  /phụ[\s._-]*đề/i.test(fileName)
 ) {
   languageLabel =
-    "ðŸ‡»ðŸ‡³ Phá»¥ Ä‘á» Viá»‡t";
+    "🇻🇳 Phụ đề Việt";
 
 // English Sub
 } else if (
@@ -5590,12 +5590,12 @@ if (
   /english[\s._-]*sub/i.test(fileName)
 ) {
   languageLabel =
-    "ðŸ‡¬ðŸ‡§ English Sub";
+    "🇬🇧 English Sub";
 }
 
 
 // ---------------------------------------------------------
-// Nháº­n diá»‡n cháº¥t lÆ°á»£ng
+// Nhận diện chất lượng
 // ---------------------------------------------------------
 
 let qualityLabel = "";
@@ -5616,12 +5616,12 @@ if (/\b2160p\b/i.test(fileName)) {
 
 
 // ---------------------------------------------------------
-// Táº¡o tÃªn Stream hoÃ n chá»‰nh
+// Tạo tên Stream hoàn chỉnh
 // ---------------------------------------------------------
 
 const streamTitle =
   qualityLabel
-    ? `${languageLabel} â€¢ ${qualityLabel}`
+    ? `${languageLabel} • ${qualityLabel}`
     : languageLabel;
 
         const streamUrl =
@@ -5631,7 +5631,7 @@ const streamTitle =
 
         return {
           name:
-            "Kho Phim Gia ÄÃ¬nh",
+            "Kho Phim Gia Đình",
           title:
             streamTitle,
           url:
@@ -5878,7 +5878,7 @@ responseHeaders.set(
   },
 async queue(batch, env) {
   console.log(
-    `TM-LT Queue: nháº­n ${batch.messages.length} message(s)`
+    `TM-LT Queue: nhận ${batch.messages.length} message(s)`
   );
 
   for (const message of batch.messages) {
@@ -5891,7 +5891,7 @@ async queue(batch, env) {
       );
 
       // -----------------------------------------------------
-      // Cháº¡y batch hiá»‡n táº¡i
+      // Chạy batch hiện tại
       // -----------------------------------------------------
 
       const result =
@@ -5916,7 +5916,7 @@ async queue(batch, env) {
         JSON.parse(resultText);
 
       // -----------------------------------------------------
-      // 1. Váº«n cÃ²n batch cá»§a thÆ° viá»‡n hiá»‡n táº¡i
+      // 1. Vẫn còn batch của thư viện hiện tại
       // -----------------------------------------------------
 
       if (
@@ -5942,7 +5942,7 @@ async queue(batch, env) {
         };
 
         console.log(
-          "TM-LT Queue: gá»­i batch tiáº¿p theo:",
+          "TM-LT Queue: gửi batch tiếp theo:",
           JSON.stringify(nextJob)
         );
 
@@ -5953,15 +5953,15 @@ async queue(batch, env) {
       } else {
 
         // ---------------------------------------------------
-        // 2. ThÆ° viá»‡n hiá»‡n táº¡i Ä‘Ã£ hoÃ n táº¥t
+        // 2. Thư viện hiện tại đã hoàn tất
         // ---------------------------------------------------
 
         console.log(
-          `TM-LT Queue: thÆ° viá»‡n ${job.libraryId} Ä‘Ã£ hoÃ n táº¥t.`
+          `TM-LT Queue: thư viện ${job.libraryId} đã hoàn tất.`
         );
 
         // ---------------------------------------------------
-        // Náº¿u Ä‘Ã¢y lÃ  Reindex táº¥t cáº£
+        // Nếu đây là Reindex tất cả
         // ---------------------------------------------------
 
         if (
@@ -5975,7 +5975,7 @@ async queue(batch, env) {
             currentIndex + 1;
 
           // -------------------------------------------------
-          // CÃ²n thÆ° viá»‡n tiáº¿p theo
+          // Còn thư viện tiếp theo
           // -------------------------------------------------
 
           if (
@@ -5986,11 +5986,11 @@ async queue(batch, env) {
               job.libraryIds[nextIndex];
 
             console.log(
-              `TM-LT Queue: chuyá»ƒn sang thÆ° viá»‡n ${nextIndex + 1}/${job.libraryIds.length}: ${nextLibraryId}`
+              `TM-LT Queue: chuyển sang thư viện ${nextIndex + 1}/${job.libraryIds.length}: ${nextLibraryId}`
             );
 
             // -----------------------------------------------
-            // Táº¡o Job má»›i cho thÆ° viá»‡n tiáº¿p theo
+            // Tạo Job mới cho thư viện tiếp theo
             // -----------------------------------------------
 
             const nextJobResult =
@@ -6024,12 +6024,12 @@ async queue(batch, env) {
 
             if (!nextJobId) {
               throw new Error(
-                `KhÃ´ng táº¡o Ä‘Æ°á»£c Reindex Job cho library ${nextLibraryId}`
+                `Không tạo được Reindex Job cho library ${nextLibraryId}`
               );
             }
 
             // -----------------------------------------------
-            // ÄÆ°a thÆ° viá»‡n tiáº¿p theo vÃ o Queue
+            // Đưa thư viện tiếp theo vào Queue
             // -----------------------------------------------
 
             const nextJob = {
@@ -6054,7 +6054,7 @@ async queue(batch, env) {
             };
 
             console.log(
-              "TM-LT Queue: gá»­i thÆ° viá»‡n tiáº¿p theo:",
+              "TM-LT Queue: gửi thư viện tiếp theo:",
               JSON.stringify(nextJob)
             );
 
@@ -6065,27 +6065,27 @@ async queue(batch, env) {
           } else {
 
             // -----------------------------------------------
-            // ÄÃ£ hoÃ n táº¥t toÃ n bá»™ thÆ° viá»‡n
+            // Đã hoàn tất toàn bộ thư viện
             // -----------------------------------------------
 
             console.log(
-              "TM-LT Queue: Reindex táº¥t cáº£ thÆ° viá»‡n Ä‘Ã£ hoÃ n táº¥t."
+              "TM-LT Queue: Reindex tất cả thư viện đã hoàn tất."
             );
           }
         } else {
 
           // -------------------------------------------------
-          // Reindex má»™t thÆ° viá»‡n bÃ¬nh thÆ°á»ng
+          // Reindex một thư viện bình thường
           // -------------------------------------------------
 
           console.log(
-            "TM-LT Queue: Reindex thÆ° viá»‡n Ä‘Ã£ hoÃ n táº¥t."
+            "TM-LT Queue: Reindex thư viện đã hoàn tất."
           );
         }
       }
 
       // -----------------------------------------------------
-      // XÃ¡c nháº­n message Ä‘Ã£ xá»­ lÃ½
+      // Xác nhận message đã xử lý
       // -----------------------------------------------------
 
       message.ack();
