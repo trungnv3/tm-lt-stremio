@@ -1,4 +1,4 @@
-import {
+﻿import {
   testDriveConnection,
   scanDriveLibrary,
   getDriveFileStream
@@ -6,10 +6,12 @@ import {
 import {
   getMovieById,
   getTvById,
+  getTvEpisodeById,
    searchMovie,
-  searchTv,
-  pickBestMovieResult,
-  getPosterUrl,
+   searchTv,
+   pickBestMovieResult,
+   pickBestTvResult,
+   getPosterUrl,
   getBackdropUrl,
    resolveMovie,
   resolveMovieById,
@@ -44,7 +46,7 @@ async function runReindexWorker(
 
   try {
     // -----------------------------------------------------
-    // 1. Lấy thư viện được yêu cầu
+    // 1. Láº¥y thÆ° viá»‡n Ä‘Æ°á»£c yÃªu cáº§u
     // -----------------------------------------------------
     const library = await env.tm_lt_db
       .prepare(
@@ -64,7 +66,7 @@ async function runReindexWorker(
             status: "error",
             reindex: "library_not_found",
             message:
-              "Không tìm thấy thư viện Google Drive đang được bật"
+              "KhÃ´ng tÃ¬m tháº¥y thÆ° viá»‡n Google Drive Ä‘ang Ä‘Æ°á»£c báº­t"
           },
           null,
           2
@@ -80,7 +82,7 @@ async function runReindexWorker(
     }
 
     // -----------------------------------------------------
-    // 2. Tạo job mới hoặc tiếp tục job hiện tại
+    // 2. Táº¡o job má»›i hoáº·c tiáº¿p tá»¥c job hiá»‡n táº¡i
     // -----------------------------------------------------
     if (existingJobId) {
       const existingJob = await env.tm_lt_db
@@ -107,7 +109,7 @@ async function runReindexWorker(
               status: "error",
               reindex: "job_not_found",
               message:
-                "Không tìm thấy Reindex job hoặc job không thuộc thư viện này"
+                "KhÃ´ng tÃ¬m tháº¥y Reindex job hoáº·c job khÃ´ng thuá»™c thÆ° viá»‡n nÃ y"
             },
             null,
             2
@@ -124,14 +126,31 @@ async function runReindexWorker(
 
       jobId = existingJobId;
 
-    } else {
+        } else {
       const job = await env.tm_lt_db
         .prepare(
           `INSERT INTO reindex_jobs (
              library_id,
-             status
+             status,
+             started_at,
+             finished_at,
+             files_found,
+             files_added,
+             files_updated,
+             files_removed,
+             error_message
            )
-           VALUES (?, ?)`
+           VALUES (
+             ?,
+             ?,
+             CURRENT_TIMESTAMP,
+             NULL,
+             0,
+             0,
+             0,
+             0,
+             NULL
+           )`
         )
         .bind(
           library.id,
@@ -144,7 +163,7 @@ async function runReindexWorker(
     }
 
     // -----------------------------------------------------
-    // 3. Scan toàn bộ Google Drive
+    // 3. Scan toÃ n bá»™ Google Drive
     // -----------------------------------------------------
     const driveFiles =
       await scanDriveLibrary(
@@ -162,7 +181,7 @@ async function runReindexWorker(
       );
 
     // -----------------------------------------------------
-    // 4. Ghi tổng số file tìm thấy
+    // 4. Ghi tá»•ng sá»‘ file tÃ¬m tháº¥y
     // -----------------------------------------------------
     await env.tm_lt_db
       .prepare(
@@ -177,7 +196,7 @@ async function runReindexWorker(
       .run();
 
     // -----------------------------------------------------
-    // 5. Danh sách Drive ID hiện tại
+    // 5. Danh sÃ¡ch Drive ID hiá»‡n táº¡i
     // -----------------------------------------------------
     const currentDriveIds =
       new Set(
@@ -187,7 +206,7 @@ async function runReindexWorker(
       );
 
     // -----------------------------------------------------
-    // 6. Bộ đếm
+    // 6. Bá»™ Ä‘áº¿m
     // -----------------------------------------------------
     let filesAdded = 0;
     let filesUpdated = 0;
@@ -197,7 +216,7 @@ async function runReindexWorker(
     let errors = [];
 
     // -----------------------------------------------------
-    // Nếu tiếp tục job cũ thì lấy số liệu đã tích lũy
+    // Náº¿u tiáº¿p tá»¥c job cÅ© thÃ¬ láº¥y sá»‘ liá»‡u Ä‘Ã£ tÃ­ch lÅ©y
     // -----------------------------------------------------
     if (existingJobId) {
       const previousJob =
@@ -240,7 +259,7 @@ async function runReindexWorker(
     }
 
     // -----------------------------------------------------
-    // 7. Retry TMDB khi gặp lỗi tạm thời
+    // 7. Retry TMDB khi gáº·p lá»—i táº¡m thá»i
     // -----------------------------------------------------
     const resolveMediaWithRetry =
       async (parsed) => {
@@ -291,7 +310,7 @@ async function runReindexWorker(
       };
 
     // -----------------------------------------------------
-    // 8. Lấy batch hiện tại
+    // 8. Láº¥y batch hiá»‡n táº¡i
     // -----------------------------------------------------
     const batchFiles =
       videoFiles.slice(
@@ -302,7 +321,7 @@ async function runReindexWorker(
     for (const file of batchFiles) {
       try {
         // -------------------------------------------------
-        // Kiểm tra file đã tồn tại trong D1 chưa
+        // Kiá»ƒm tra file Ä‘Ã£ tá»“n táº¡i trong D1 chÆ°a
         // -------------------------------------------------
         const existing =
           await env.tm_lt_db
@@ -321,8 +340,8 @@ async function runReindexWorker(
             .first();
 
         // -------------------------------------------------
-// File không thay đổi -> bỏ qua
-// Trừ khi cần refresh metadata
+// File khÃ´ng thay Ä‘á»•i -> bá» qua
+// Trá»« khi cáº§n refresh metadata
 // -------------------------------------------------
 const needsMetadataRefresh =
   existing &&
@@ -355,7 +374,7 @@ if (
 }
 
         // -------------------------------------------------
-        // File mới hoặc đã thay đổi
+        // File má»›i hoáº·c Ä‘Ã£ thay Ä‘á»•i
         // -------------------------------------------------
         const parsed =
           parseFilename(file.name);
@@ -366,7 +385,7 @@ if (
           );
 
         // -------------------------------------------------
-        // Không tìm thấy TMDB
+        // KhÃ´ng tÃ¬m tháº¥y TMDB
         // -------------------------------------------------
         if (!tmdb) {
           filesFailed++;
@@ -375,7 +394,7 @@ if (
             driveFileId: file.id,
             fileName: file.name,
             error:
-              "Không tìm thấy thông tin TMDB"
+              "KhÃ´ng tÃ¬m tháº¥y thÃ´ng tin TMDB"
           });
 
           continue;
@@ -447,9 +466,11 @@ if (
               overview,
               genres,
               vote_average,
+              season,
+              episode,
               is_active
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
             ON CONFLICT(drive_file_id)
             DO UPDATE SET
               library_id = excluded.library_id,
@@ -467,6 +488,8 @@ if (
               overview = excluded.overview,
               genres = excluded.genres,
               vote_average = excluded.vote_average,
+              season = excluded.season,
+              episode = excluded.episode,
               is_active = 1,
               updated_at = CURRENT_TIMESTAMP`
           )
@@ -488,12 +511,14 @@ if (
             backdropUrl,
             overview,
             genres,
-            tmdb?.voteAverage ?? 0
+            tmdb?.voteAverage ?? 0,
+            parsed.season ?? null,
+            parsed.episode ?? null
           )
           .run();
 
         // -------------------------------------------------
-        // Đếm thêm / cập nhật
+        // Äáº¿m thÃªm / cáº­p nháº­t
         // -------------------------------------------------
         if (existing) {
           filesUpdated++;
@@ -502,7 +527,7 @@ if (
         }
 
         // -------------------------------------------------
-        // Tạo stream nếu chưa có
+        // Táº¡o stream náº¿u chÆ°a cÃ³
         // -------------------------------------------------
         await env.tm_lt_db
           .prepare(
@@ -544,8 +569,8 @@ if (
     }
 
     // -----------------------------------------------------
-    // 9. Đánh dấu movie không còn trên Drive là inactive
-    // Chỉ thực hiện ở batch cuối
+    // 9. ÄÃ¡nh dáº¥u movie khÃ´ng cÃ²n trÃªn Drive lÃ  inactive
+    // Chá»‰ thá»±c hiá»‡n á»Ÿ batch cuá»‘i
     // -----------------------------------------------------
     let filesRemoved = 0;
 
@@ -591,7 +616,7 @@ if (
     }
 
     // -----------------------------------------------------
-    // 10. Cập nhật reindex job
+    // 10. Cáº­p nháº­t reindex job
     // -----------------------------------------------------
     const finalStatus =
       isLastBatch
@@ -635,7 +660,7 @@ if (
       .run();
 
     // -----------------------------------------------------
-    // 11. Kết quả
+    // 11. Káº¿t quáº£
     // -----------------------------------------------------
     const nextOffset =
       isLastBatch
@@ -695,7 +720,7 @@ const nextBatchUrl =
   } catch (error) {
 
     // -----------------------------------------------------
-    // Lỗi toàn bộ Reindex
+    // Lá»—i toÃ n bá»™ Reindex
     // -----------------------------------------------------
     if (jobId !== null) {
       try {
@@ -716,7 +741,7 @@ const nextBatchUrl =
           )
           .run();
       } catch {
-        // Không che mất lỗi gốc
+        // KhÃ´ng che máº¥t lá»—i gá»‘c
       }
     }
 
@@ -1088,7 +1113,7 @@ export default {
   <h1>VanTrung MediaHub</h1>
 
   <div class="subtitle">
-    Quản lý các thư viện Google Drive và cập nhật catalog.
+    Quáº£n lÃ½ cÃ¡c thÆ° viá»‡n Google Drive vÃ  cáº­p nháº­t catalog.
   </div>
 
   <!-- SECRET -->
@@ -1103,18 +1128,18 @@ export default {
       <input
         id="secret"
         type="password"
-        placeholder="Nhập REINDEX_SECRET"
+        placeholder="Nháº­p REINDEX_SECRET"
         autocomplete="off"
       >
 
       <button onclick="loadLibraries()">
-        Tải danh sách thư viện
+        Táº£i danh sÃ¡ch thÆ° viá»‡n
       </button>
 
     </div>
 
     <div id="authStatus" class="status auth-status">
-      Chưa xác thực
+      ChÆ°a xÃ¡c thá»±c
     </div>
 
   </div>
@@ -1123,18 +1148,28 @@ export default {
   <!-- LIBRARIES -->
   <div class="card">
 
-    <div class="section-title">
-
-      <h2>Thư viện Google Drive</h2>
-
-      <span id="libraryCount" class="count">
-        0 thư viện
-      </span>
-
+    <div class="section-title library-section-title">
+    <div>
+        <h2>ThÆ° viá»‡n Google Drive</h2>
+        <span id="library-count" class="library-count"></span>
     </div>
 
+    <button
+        class="btn btn-primary"
+        onclick="reindexAllLibraries()"
+    >
+        ðŸ”„ Reindex táº¥t cáº£
+    </button>
+</div>
+
+<div
+    id="reindex-all-status"
+    class="reindex-all-status"
+    style="display:none;"
+></div>
+
     <div id="libraries">
-      Chưa tải danh sách.
+      ChÆ°a táº£i danh sÃ¡ch.
     </div>
 
 
@@ -1144,7 +1179,7 @@ export default {
         class="secondary"
         onclick="toggleAddForm()"
       >
-        + Thêm thư viện
+        + ThÃªm thÆ° viá»‡n
       </button>
 
     </div>
@@ -1154,33 +1189,33 @@ export default {
 
     <div id="addForm" class="add-form">
 
-      <label>Tên thư viện</label>
+      <label>TÃªn thÆ° viá»‡n</label>
 
       <input
         id="libraryName"
-        placeholder="Ví dụ: Phim Hoạt Hình"
+        placeholder="VÃ­ dá»¥: Phim Hoáº¡t HÃ¬nh"
       >
 
       <label>
-        Google Drive Folder ID hoặc URL
+        Google Drive Folder ID hoáº·c URL
       </label>
 
       <input
         id="folderInput"
-        placeholder="Folder ID hoặc URL thư mục Drive"
+        placeholder="Folder ID hoáº·c URL thÆ° má»¥c Drive"
       >
 
       <div class="add-actions">
 
         <button onclick="addLibrary()">
-          Lưu danh sách
+          LÆ°u danh sÃ¡ch
         </button>
 
         <button
           class="secondary"
           onclick="toggleAddForm(false)"
         >
-          Hủy
+          Há»§y
         </button>
 
       </div>
@@ -1192,9 +1227,9 @@ export default {
 
   <div class="footer-note">
 
-    Secret chỉ được gửi qua HTTPS trong header
-    Authorization và không lưu trên trình duyệt.
-    Có thể dán folder ID hoặc URL thư mục Drive.
+    Secret chá»‰ Ä‘Æ°á»£c gá»­i qua HTTPS trong header
+    Authorization vÃ  khÃ´ng lÆ°u trÃªn trÃ¬nh duyá»‡t.
+    CÃ³ thá»ƒ dÃ¡n folder ID hoáº·c URL thÆ° má»¥c Drive.
 
   </div>
 
@@ -1219,52 +1254,52 @@ async function loadLibraries() {
     const authStatus = document.getElementById("authStatus");
 
     if (!adminSecret) {
-        authStatus.innerHTML = '<span style="color:#f87171">Vui lòng nhập REINDEX_SECRET</span>';
+        authStatus.innerHTML = '<span style="color:#f87171">Vui lÃ²ng nháº­p REINDEX_SECRET</span>';
         return;
     }
-    
-    authStatus.innerHTML = '⏳ Đang xác thực...';
-    
+
+    authStatus.innerHTML = 'â³ Äang xÃ¡c thá»±c...';
+
     try {
         const response = await fetch("/admin/libraries", { method: "GET", headers: getHeaders() });
         const data = await response.json();
-        
+
         if (!response.ok) {
-            throw new Error(data.message || "Không thể tải thư viện");
+            throw new Error(data.message || "KhÃ´ng thá»ƒ táº£i thÆ° viá»‡n");
         }
-        
-        authStatus.innerHTML = '<span style="color:#4ade80">✓ Đã xác thực thành công</span>';
+
+        authStatus.innerHTML = '<span style="color:#4ade80">âœ“ ÄÃ£ xÃ¡c thá»±c thÃ nh cÃ´ng</span>';
         renderLibraries(data.libraries || []);
     } catch (error) {
-        authStatus.innerHTML = '<span style="color:#f87171">✕ ' + escapeHtml(error.message) + '</span>';
+        authStatus.innerHTML = '<span style="color:#f87171">âœ• ' + escapeHtml(error.message) + '</span>';
     }
 }
 
 function renderLibraries(libraries) {
     const container = document.getElementById("libraries");
     const count = document.getElementById("libraryCount");
-    
-    count.textContent = libraries.length + " thư viện";
-    
+
+    count.textContent = libraries.length + " thÆ° viá»‡n";
+
     if (!libraries.length) {
-        container.innerHTML = '<div class="empty-state">Chưa có thư viện.</div>';
+        container.innerHTML = '<div class="empty-state">ChÆ°a cÃ³ thÆ° viá»‡n.</div>';
         return;
     }
-    
-    // Sử dụng kỹ thuật dataset để KHÔNG cần escape dấu nháy trong JavaScript
+
+    // Sá»­ dá»¥ng ká»¹ thuáº­t dataset Ä‘á»ƒ KHÃ”NG cáº§n escape dáº¥u nhÃ¡y trong JavaScript
     container.innerHTML = libraries.map(function(library) {
         const id = escapeHtml(library.id);
         const name = escapeHtml(library.name);
         const folder = escapeHtml(library.folder_id);
-        
+
         return '<div class="library-card">' +
-                 '<div class="library-header">🎬 ' + name + '</div>' +
+                 '<div class="library-header">ðŸŽ¬ ' + name + '</div>' +
                  '<div class="library-folder">Folder: ' + folder + '</div>' +
                  '<div class="library-actions">' +
                    '<button onclick="reindexLibrary(this.dataset.id)" data-id="' + id + '">Reindex</button>' +
-                   '<button class="danger" onclick="deleteLibrary(this.dataset.id)" data-id="' + id + '">Xóa</button>' +
+                   '<button class="danger" onclick="deleteLibrary(this.dataset.id)" data-id="' + id + '">XÃ³a</button>' +
                  '</div>' +
-                 '<div class="library-status" id="status-' + id + '">Chưa Reindex trong phiên này.</div>' +
+                 '<div class="library-status" id="status-' + id + '">ChÆ°a Reindex trong phiÃªn nÃ y.</div>' +
                '</div>';
     }).join("");
 }
@@ -1272,25 +1307,25 @@ function renderLibraries(libraries) {
 async function addLibrary() {
     const name = document.getElementById("libraryName").value.trim();
     const folder = document.getElementById("folderInput").value.trim();
-    
+
     if (!name || !folder) {
-        alert("Vui lòng nhập tên thư viện và Folder ID/URL.");
+        alert("Vui lÃ²ng nháº­p tÃªn thÆ° viá»‡n vÃ  Folder ID/URL.");
         return;
     }
-    
+
     try {
         const response = await fetch("/admin/libraries", {
             method: "POST",
             headers: { ...getHeaders(), "Content-Type": "application/json" },
             body: JSON.stringify({ name: name, folder: folder })
         });
-        
+
         const data = await response.json();
         if (!response.ok) {
-            throw new Error(data.message || "Không thể thêm thư viện");
+            throw new Error(data.message || "KhÃ´ng thá»ƒ thÃªm thÆ° viá»‡n");
         }
-        
-        alert("Đã thêm thư viện.");
+
+        alert("ÄÃ£ thÃªm thÆ° viá»‡n.");
         document.getElementById("libraryName").value = "";
         document.getElementById("folderInput").value = "";
         toggleAddForm(false);
@@ -1302,25 +1337,87 @@ async function addLibrary() {
 
 async function reindexLibrary(libraryId) {
     const statusElement = document.getElementById("status-" + libraryId);
-    statusElement.innerHTML = '<strong>⏳ Đang đưa Reindex vào Queue...</strong>';
-    
+    statusElement.innerHTML = '<strong>â³ Äang Ä‘Æ°a Reindex vÃ o Queue...</strong>';
+
     try {
         const response = await fetch("/admin/reindex/" + libraryId, { method: "POST", headers: getHeaders() });
         const data = await response.json();
-        
+
         if (!response.ok) {
-            throw new Error(data.message || "Không thể Reindex");
+            throw new Error(data.message || "KhÃ´ng thá»ƒ Reindex");
         }
-        
-        statusElement.innerHTML = '<strong>✓ Đã đưa vào Queue...</strong>';
+
+        statusElement.innerHTML = '<strong>âœ“ ÄÃ£ Ä‘Æ°a vÃ o Queue...</strong>';
         if (data.jobId) {
             startPolling(libraryId, data.jobId);
         }
     } catch (error) {
-        statusElement.innerHTML = '<strong>✕ ' + escapeHtml(error.message) + '</strong>';
+        statusElement.innerHTML = '<strong>âœ• ' + escapeHtml(error.message) + '</strong>';
     }
 }
+// ---------------------------------------------------------
+// Reindex táº¥t cáº£ thÆ° viá»‡n
+// ---------------------------------------------------------
+async function reindexAllLibraries() {
+    const statusElement =
+        document.getElementById("reindex-all-status");
 
+    if (!statusElement) {
+        return;
+    }
+
+    // Hiá»ƒn thá»‹ tráº¡ng thÃ¡i
+    statusElement.style.display = "block";
+
+    statusElement.innerHTML =
+        '<strong>â³ Äang báº¯t Ä‘áº§u Reindex táº¥t cáº£ thÆ° viá»‡n...</strong>';
+
+    try {
+        const response =
+            await fetch(
+                "/admin/reindex-all",
+                {
+                    method: "POST",
+                    headers: getHeaders()
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.message ||
+                "KhÃ´ng thá»ƒ báº¯t Ä‘áº§u Reindex táº¥t cáº£"
+            );
+        }
+
+        statusElement.innerHTML =
+            "<strong>âœ“ ÄÃ£ Ä‘Æ°a Reindex táº¥t cáº£ vÃ o Queue.</strong>" +
+            "<br>" +
+            "Äang xá»­ lÃ½ thÆ° viá»‡n Ä‘áº§u tiÃªn...";
+
+        // Báº¯t Ä‘áº§u theo dÃµi tiáº¿n Ä‘á»™
+        if (
+            data.totalLibraries &&
+            data.totalLibraries > 0
+        ) {
+            startPollingReindexAll(
+                data.totalLibraries,
+                data.jobId
+            );
+        }
+
+    } catch (error) {
+
+        statusElement.innerHTML =
+            "<strong>âœ• " +
+            escapeHtml(
+                error.message
+            ) +
+            "</strong>";
+    }
+}
 function startPolling(libraryId, jobId) {
     if (pollTimers[libraryId]) {
         clearInterval(pollTimers[libraryId]);
@@ -1334,61 +1431,61 @@ async function checkJobStatus(libraryId, jobId) {
     try {
         const response = await fetch("/admin/reindex/status/" + jobId, { method: "GET", headers: getHeaders() });
         const data = await response.json();
-        
+
         if (!response.ok) {
-            throw new Error(data.message || "Không lấy được trạng thái");
+            throw new Error(data.message || "KhÃ´ng láº¥y Ä‘Æ°á»£c tráº¡ng thÃ¡i");
         }
-        
+
         const job = data.job;
         let html = "";
-        
+
         if (job.status === "running") {
-            html += '<strong>⟳ Đang Reindex...</strong>';
+            html += '<strong>âŸ³ Äang Reindex...</strong>';
         } else if (job.status === "completed") {
-            html += '<strong style="color:#4ade80">✓ Hoàn tất</strong>';
+            html += '<strong style="color:#4ade80">âœ“ HoÃ n táº¥t</strong>';
         } else if (job.status === "completed_with_errors") {
-            html += '<strong style="color:#fbbf24">⚠ Hoàn tất nhưng có lỗi</strong>';
+            html += '<strong style="color:#fbbf24">âš  HoÃ n táº¥t nhÆ°ng cÃ³ lá»—i</strong>';
         } else if (job.status === "failed") {
-            html += '<strong style="color:#f87171">✕ Thất bại</strong>';
+            html += '<strong style="color:#f87171">âœ• Tháº¥t báº¡i</strong>';
         } else {
             html += '<strong>' + escapeHtml(job.status) + '</strong>';
         }
-        
+
         html += "<br>Job ID: " + job.id + "<br>";
-        html += "Files tìm thấy: " + (job.files_found ?? 0) + "<br>";
-        html += "Thêm mới: " + (job.files_added ?? 0) + "<br>";
-        html += "Cập nhật: " + (job.files_updated ?? 0) + "<br>";
-        html += "Xóa/ngừng hoạt động: " + (job.files_removed ?? 0);
-        
+        html += "Files tÃ¬m tháº¥y: " + (job.files_found ?? 0) + "<br>";
+        html += "ThÃªm má»›i: " + (job.files_added ?? 0) + "<br>";
+        html += "Cáº­p nháº­t: " + (job.files_updated ?? 0) + "<br>";
+        html += "XÃ³a/ngá»«ng hoáº¡t Ä‘á»™ng: " + (job.files_removed ?? 0);
+
         if (job.error_message) {
             html += "<br><span style='color:#f87171'>" + escapeHtml(job.error_message) + "</span>";
         }
-        
+
         statusElement.innerHTML = html;
-        
+
         if (job.status === "completed" || job.status === "completed_with_errors" || job.status === "failed") {
             clearInterval(pollTimers[libraryId]);
             delete pollTimers[libraryId];
         }
     } catch (error) {
-        statusElement.innerHTML = '<strong>✕ ' + escapeHtml(error.message) + '</strong>';
+        statusElement.innerHTML = '<strong>âœ• ' + escapeHtml(error.message) + '</strong>';
     }
 }
 
 async function deleteLibrary(libraryId) {
-    if (!confirm("Bạn có chắc muốn xóa thư viện này?")) {
+    if (!confirm("Báº¡n cÃ³ cháº¯c muá»‘n xÃ³a thÆ° viá»‡n nÃ y?")) {
         return;
     }
-    
+
     try {
         const response = await fetch("/admin/libraries/" + libraryId, { method: "DELETE", headers: getHeaders() });
         const data = await response.json();
-        
+
         if (!response.ok) {
-            throw new Error(data.message || "Không thể xóa thư viện");
+            throw new Error(data.message || "KhÃ´ng thá»ƒ xÃ³a thÆ° viá»‡n");
         }
-        
-        alert("Đã xóa thư viện.");
+
+        alert("ÄÃ£ xÃ³a thÆ° viá»‡n.");
         await loadLibraries();
     } catch (error) {
         alert(error.message);
@@ -1420,10 +1517,10 @@ function escapeHtml(value) {
     }
 
     // ---------------------------------------------------------
-    // Admin - Quản lý thư viện
+    // Admin - Quáº£n lÃ½ thÆ° viá»‡n
     // ---------------------------------------------------------
     // ---------------------------------------------------------
-    // Admin - Quản lý thư viện
+    // Admin - Quáº£n lÃ½ thÆ° viá»‡n
     // ---------------------------------------------------------
 
     // GET /admin/libraries
@@ -1441,10 +1538,282 @@ function escapeHtml(value) {
     ) {
       return addLibrary(request, env);
     }
+// ---------------------------------------------------------
+// Admin - Tráº¡ng thÃ¡i Reindex táº¥t cáº£
+// GET /admin/reindex-all/status?libraries=1,2,3
+// ---------------------------------------------------------
+if (
+  url.pathname === "/admin/reindex-all/status" &&
+  request.method === "GET"
+) {
+  // -------------------------------------------------------
+  // Kiá»ƒm tra secret
+  // -------------------------------------------------------
+  const authorization =
+    request.headers.get("Authorization");
 
+  if (!authorization) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Unauthorized"
+      }),
+      {
+        status: 401,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+
+  const match =
+    authorization.match(/^Bearer\s+(.+)$/i);
+
+  if (
+    !match ||
+    !env.REINDEX_SECRET ||
+    match[1].trim() !== env.REINDEX_SECRET
+  ) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Unauthorized"
+      }),
+      {
+        status: 401,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+
+  // -------------------------------------------------------
+  // Láº¥y danh sÃ¡ch library ID
+  // -------------------------------------------------------
+  const librariesParam =
+    url.searchParams.get("libraries") || "";
+
+  const libraryIds =
+    librariesParam
+      .split(",")
+      .map(id => Number(id.trim()))
+      .filter(
+        id =>
+          Number.isInteger(id) &&
+          id > 0
+      );
+
+  if (libraryIds.length === 0) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message:
+          "Thiáº¿u danh sÃ¡ch library ID"
+      }),
+      {
+        status: 400,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+
+  // -------------------------------------------------------
+  // Láº¥y thÃ´ng tin thÆ° viá»‡n
+  // -------------------------------------------------------
+  const placeholders =
+    libraryIds
+      .map(() => "?")
+      .join(",");
+
+  const librariesResult =
+    await env.tm_lt_db
+      .prepare(`
+        SELECT
+          id,
+          name,
+          folder_id,
+          enabled
+        FROM libraries
+        WHERE id IN (${placeholders})
+        ORDER BY id ASC
+      `)
+      .bind(...libraryIds)
+      .all();
+
+  const libraries =
+    librariesResult.results || [];
+
+  // -------------------------------------------------------
+  // Láº¥y Job má»›i nháº¥t cá»§a tá»«ng thÆ° viá»‡n
+  // -------------------------------------------------------
+  const items = [];
+
+  for (const library of libraries) {
+    const job =
+      await env.tm_lt_db
+        .prepare(`
+          SELECT
+            id,
+            library_id,
+            status,
+            started_at,
+            finished_at,
+            files_found,
+            files_added,
+            files_updated,
+            files_removed,
+            error_message
+          FROM reindex_jobs
+          WHERE library_id = ?
+          ORDER BY id DESC
+          LIMIT 1
+        `)
+        .bind(library.id)
+        .first();
+
+    items.push({
+      libraryId:
+        library.id,
+
+      name:
+        library.name,
+
+      enabled:
+        library.enabled,
+
+      job:
+        job || null
+    });
+  }
+
+  // -------------------------------------------------------
+  // TÃ­nh tiáº¿n Ä‘á»™
+  // -------------------------------------------------------
+  const total =
+    items.length;
+
+  let completed = 0;
+  let currentIndex = -1;
+  let current = null;
+  let failed = 0;
+
+  for (
+    let i = 0;
+    i < items.length;
+    i++
+  ) {
+    const item =
+      items[i];
+
+    const job =
+      item.job;
+
+    if (!job) {
+      if (currentIndex === -1) {
+        currentIndex = i;
+        current = item;
+      }
+
+      continue;
+    }
+
+    if (
+      job.status === "completed" ||
+      job.status === "completed_with_errors"
+    ) {
+      completed++;
+
+      if (
+        job.status ===
+        "completed_with_errors"
+      ) {
+        failed++;
+      }
+
+    } else if (
+      job.status === "failed"
+    ) {
+      failed++;
+
+      if (currentIndex === -1) {
+        currentIndex = i;
+        current = item;
+      }
+
+    } else if (
+      job.status === "running" ||
+      job.status === "queued"
+    ) {
+      if (currentIndex === -1) {
+        currentIndex = i;
+        current = item;
+      }
+    }
+  }
+
+  // -------------------------------------------------------
+  // Náº¿u táº¥t cáº£ Ä‘Ã£ hoÃ n táº¥t
+  // -------------------------------------------------------
+  if (
+    completed === total &&
+    total > 0
+  ) {
+    currentIndex = total - 1;
+    current =
+      items[total - 1];
+  }
+
+  // -------------------------------------------------------
+  // Tráº£ káº¿t quáº£
+  // -------------------------------------------------------
+  return new Response(
+    JSON.stringify({
+      status: "ok",
+
+      total,
+
+      completed,
+
+      failed,
+
+      currentIndex,
+
+      currentLibrary:
+        current
+          ? {
+              libraryId:
+                current.libraryId,
+
+              name:
+                current.name,
+
+              job:
+                current.job
+            }
+          : null,
+
+      libraries:
+        items
+    }, null, 2),
+    {
+      status: 200,
+      headers: {
+        "content-type":
+          "application/json; charset=UTF-8"
+      }
+    }
+  );
+}
     // DELETE /admin/libraries/:id
     // ---------------------------------------------------------
-    // Admin - Reindex thư viện
+    // Admin - Reindex thÆ° viá»‡n
     // ---------------------------------------------------------
 // GET /admin/reindex/status/:jobId
 if (
@@ -1504,7 +1873,7 @@ if (
     return new Response(
       JSON.stringify({
         status: "error",
-        message: "Job ID không hợp lệ"
+        message: "Job ID khÃ´ng há»£p lá»‡"
       }),
       {
         status: 400,
@@ -1541,7 +1910,7 @@ if (
     return new Response(
       JSON.stringify({
         status: "error",
-        message: "Không tìm thấy Reindex job"
+        message: "KhÃ´ng tÃ¬m tháº¥y Reindex job"
       }),
       {
         status: 404,
@@ -1567,7 +1936,204 @@ if (
     }
   );
 }
-    // POST /admin/reindex/:id
+
+// ---------------------------------------------------------
+// Admin - Reindex táº¥t cáº£ thÆ° viá»‡n
+// POST /admin/reindex-all
+// ---------------------------------------------------------
+if (
+  url.pathname === "/admin/reindex-all" &&
+  request.method === "POST"
+) {
+  // -------------------------------------------------------
+  // Kiá»ƒm tra secret
+  // -------------------------------------------------------
+  const authorization =
+    request.headers.get("Authorization");
+
+  if (!authorization) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Unauthorized"
+      }),
+      {
+        status: 401,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+
+  const match =
+    authorization.match(/^Bearer\s+(.+)$/i);
+
+  if (
+    !match ||
+    !env.REINDEX_SECRET ||
+    match[1].trim() !== env.REINDEX_SECRET
+  ) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Unauthorized"
+      }),
+      {
+        status: 401,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+
+  // -------------------------------------------------------
+  // Láº¥y toÃ n bá»™ thÆ° viá»‡n Ä‘ang Ä‘Æ°á»£c báº­t
+  // -------------------------------------------------------
+  const libraries =
+    await env.tm_lt_db
+      .prepare(`
+        SELECT
+          id,
+          name,
+          folder_id
+        FROM libraries
+        WHERE enabled = 1
+        ORDER BY id ASC
+      `)
+      .all();
+
+  const libraryList =
+    libraries.results || [];
+
+  if (libraryList.length === 0) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message:
+          "KhÃ´ng cÃ³ thÆ° viá»‡n nÃ o Ä‘ang Ä‘Æ°á»£c báº­t"
+      }),
+      {
+        status: 400,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+
+  // -------------------------------------------------------
+  // Láº¥y thÆ° viá»‡n Ä‘áº§u tiÃªn
+  // -------------------------------------------------------
+  const firstLibrary =
+    libraryList[0];
+
+  // -------------------------------------------------------
+  // Táº¡o Reindex Job cho thÆ° viá»‡n Ä‘áº§u tiÃªn
+  // -------------------------------------------------------
+  const jobResult =
+    await env.tm_lt_db
+      .prepare(`
+        INSERT INTO reindex_jobs (
+          library_id,
+          status,
+          started_at,
+          files_found,
+          files_added,
+          files_updated,
+          files_removed
+        )
+        VALUES (
+          ?,
+          'queued',
+          CURRENT_TIMESTAMP,
+          0,
+          0,
+          0,
+          0
+        )
+        RETURNING id
+      `)
+      .bind(firstLibrary.id)
+      .first();
+
+  const jobId =
+    jobResult?.id || null;
+
+  if (!jobId) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message:
+          "KhÃ´ng táº¡o Ä‘Æ°á»£c Reindex Job"
+      }),
+      {
+        status: 500,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+
+  // -------------------------------------------------------
+  // ÄÆ°a thÆ° viá»‡n Ä‘áº§u tiÃªn vÃ o Queue
+  // -------------------------------------------------------
+  await env.tm_lt_reindex.send({
+    reindexAll: true,
+
+    libraryIds:
+      libraryList.map(
+        library => library.id
+      ),
+
+    libraryIndex: 0,
+
+    libraryId:
+      firstLibrary.id,
+
+    offset: 0,
+
+    batchSize: 5,
+
+    existingJobId: jobId
+  });
+
+  // -------------------------------------------------------
+  // Tráº£ káº¿t quáº£
+  // -------------------------------------------------------
+  return new Response(
+    JSON.stringify({
+      status: "queued",
+      message:
+        "ÄÃ£ báº¯t Ä‘áº§u Reindex táº¥t cáº£ thÆ° viá»‡n",
+      totalLibraries:
+        libraryList.length,
+      currentLibrary: {
+        index: 0,
+        id: firstLibrary.id,
+        name: firstLibrary.name
+      },
+      jobId
+    }, null, 2),
+    {
+      status: 202,
+      headers: {
+        "content-type":
+          "application/json; charset=UTF-8"
+      }
+    }
+  );
+}
+
+// ---------------------------------------------------------
+// POST /admin/reindex/:id
+// ---------------------------------------------------------
     if (
       url.pathname.startsWith("/admin/reindex/") &&
       request.method === "POST"
@@ -1599,7 +2165,7 @@ if (
           url.searchParams.get("jobId") || 0
         ) || null;
 
-      // Kiểm tra secret
+      // Kiá»ƒm tra secret
       const authorization =
         request.headers.get("Authorization");
 
@@ -1648,7 +2214,7 @@ if (
         return new Response(
           JSON.stringify({
             status: "error",
-            message: "Library ID không hợp lệ"
+            message: "Library ID khÃ´ng há»£p lá»‡"
           }),
           {
             status: 400,
@@ -1677,7 +2243,7 @@ if (
           JSON.stringify({
             status: "error",
             message:
-              "Không tìm thấy thư viện hoặc thư viện đang tắt"
+              "KhÃ´ng tÃ¬m tháº¥y thÆ° viá»‡n hoáº·c thÆ° viá»‡n Ä‘ang táº¯t"
           }),
           {
             status: 404,
@@ -1689,7 +2255,7 @@ if (
         );
       }
         // ---------------------------------------------------------
-      // Tạo Reindex Job trước khi đưa vào Queue
+      // Táº¡o Reindex Job trÆ°á»›c khi Ä‘Æ°a vÃ o Queue
       // ---------------------------------------------------------
 
       let jobId = existingJobId;
@@ -1720,7 +2286,7 @@ if (
         return new Response(
           JSON.stringify({
             status: "error",
-            message: "Không tạo được Reindex Job"
+            message: "KhÃ´ng táº¡o Ä‘Æ°á»£c Reindex Job"
           }),
           {
             status: 500,
@@ -1733,7 +2299,7 @@ if (
       }
 
       // ---------------------------------------------------------
-      // Đưa Job vào Queue
+      // ÄÆ°a Job vÃ o Queue
       // ---------------------------------------------------------
 
       await env.tm_lt_reindex.send({
@@ -1746,7 +2312,7 @@ if (
       return new Response(
         JSON.stringify({
           status: "queued",
-          message: "Đã đưa yêu cầu Reindex vào Queue",
+          message: "ÄÃ£ Ä‘Æ°a yÃªu cáº§u Reindex vÃ o Queue",
           libraryId: library.id,
           offset,
           batchSize,
@@ -1760,7 +2326,7 @@ if (
           }
         }
       );
-  
+
     }
     if (
       url.pathname.startsWith("/admin/libraries/") &&
@@ -1791,7 +2357,7 @@ if (
     if (url.pathname === "/") {
       return new Response(
         JSON.stringify({
-          name: "Kho Phim Gia Đình",
+          name: "Kho Phim Gia ÄÃ¬nh",
           status: "ok",
           version: "0.2.0"
         }, null, 2),
@@ -1890,8 +2456,14 @@ if (
     // ---------------------------------------------------------
     if (url.pathname === "/test/drive/scan") {
       try {
-        const files =
-          await scanDriveLibrary(env);
+        const folderId =
+  url.searchParams.get("folderId");
+
+const files =
+  await scanDriveLibrary(
+    env,
+    folderId || undefined
+  );
 
         return new Response(
           JSON.stringify({
@@ -1933,45 +2505,7 @@ if (
         );
       }
     }
-    // ---------------------------------------------------------
-    // Test Movie Filename Parser
-    // ---------------------------------------------------------
-    if (url.pathname === "/test/parser") {
-      try {
-        const results = testParser();
 
-        return new Response(
-          JSON.stringify({
-            status: "ok",
-            parser: "connected",
-            count: results.length,
-            results
-          }, null, 2),
-          {
-            headers: {
-              "content-type":
-                "application/json; charset=UTF-8"
-            }
-          }
-        );
-
-      } catch (error) {
-        return new Response(
-          JSON.stringify({
-            status: "error",
-            parser: "failed",
-            message: error.message
-          }, null, 2),
-          {
-            status: 500,
-            headers: {
-              "content-type":
-                "application/json; charset=UTF-8"
-            }
-          }
-        );
-      }
-    }
     // ---------------------------------------------------------
     // Test TMDB API
     // ---------------------------------------------------------
@@ -1982,7 +2516,7 @@ if (
             JSON.stringify({
               status: "error",
               tmdb: "api_key_missing",
-              message: "TMDB_API_KEY chưa được khai báo"
+              message: "TMDB_API_KEY chÆ°a Ä‘Æ°á»£c khai bÃ¡o"
             }, null, 2),
             {
               status: 500,
@@ -2040,7 +2574,11 @@ if (
 // ---------------------------------------------------------
 if (url.pathname === "/test/parser") {
   try {
-    const results = testParser();
+    const filename = url.searchParams.get("filename");
+
+const results = filename
+  ? testParser([filename])
+  : testParser();
 
     return new Response(
       JSON.stringify({
@@ -2077,11 +2615,38 @@ if (url.pathname === "/test/parser") {
 }
 // ---------------------------------------------------------
 // Test TMDB Movie by ID
+// GET /test/tmdb/movie?id=672
 // ---------------------------------------------------------
 if (url.pathname === "/test/tmdb/movie") {
   try {
+    const idParam =
+      url.searchParams.get("id");
+
+    const tmdbId =
+      Number(idParam);
+
+    if (
+      !Number.isInteger(tmdbId) ||
+      tmdbId <= 0
+    ) {
+      return new Response(
+        JSON.stringify({
+          status: "error",
+          message:
+            "Vui lÃ²ng truyá»n TMDB movie ID há»£p lá»‡. VÃ­ dá»¥: ?id=672"
+        }, null, 2),
+        {
+          status: 400,
+          headers: {
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
     const data = await getMovieById(
-      315162,
+      tmdbId,
       env
     );
 
@@ -2126,7 +2691,6 @@ if (url.pathname === "/test/tmdb/movie") {
     );
   }
 }
-
 // ---------------------------------------------------------
 // Test TMDB TV by ID
 // ---------------------------------------------------------
@@ -2186,7 +2750,8 @@ if (url.pathname === "/test/tmdb/search") {
  const query =
   url.searchParams.get("query") ||
   "Puss in Boots The Last Wish";
-
+  const type =
+  url.searchParams.get("type") || "movie";
 const yearParam =
   url.searchParams.get("year");
 
@@ -2195,20 +2760,39 @@ const year =
     ? Number(yearParam)
     : 2022;
 
-const data = await searchMovie(
-  query,
-  env,
-  year
-);
-const best = pickBestMovieResult(
-  data,
-  year,
-  query
-);
+    let data;
+    let best;
+
+    if (type === "tv") {
+      data = await searchTv(
+        query,
+        env,
+        year
+      );
+
+      best = pickBestTvResult(
+        data,
+        year,
+        query
+      );
+    } else {
+      data = await searchMovie(
+        query,
+        env,
+        year
+      );
+
+      best = pickBestTvResult(
+        data,
+        year,
+        query
+      );
+    }
+
     return new Response(
       JSON.stringify({
         status: "ok",
-        type: "movie",
+        type,
         query,
 year,
         totalResults: data.total_results,
@@ -2263,10 +2847,388 @@ best: best
   }
 }
 // ---------------------------------------------------------
+// Test TMDB TV Episode
+// GET /test/tmdb/episode?tvId=276501&season=1&episode=1
+// ---------------------------------------------------------
+if (url.pathname === "/test/tmdb/episode") {
+  try {
+    const tvId = Number(
+      url.searchParams.get("tvId")
+    );
+
+    const season = Number(
+      url.searchParams.get("season")
+    );
+
+    const episode = Number(
+      url.searchParams.get("episode")
+    );
+
+    if (
+      !Number.isInteger(tvId) ||
+      tvId <= 0 ||
+      !Number.isInteger(season) ||
+      season < 0 ||
+      !Number.isInteger(episode) ||
+      episode <= 0
+    ) {
+      return new Response(
+        JSON.stringify({
+          status: "error",
+          message:
+            "Tham sá»‘ khÃ´ng há»£p lá»‡. VÃ­ dá»¥: ?tvId=276501&season=1&episode=1"
+        }, null, 2),
+        {
+          status: 400,
+          headers: {
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
+    const data = await getTvEpisodeById(
+      tvId,
+      season,
+      episode,
+      env
+    );
+
+    return new Response(
+      JSON.stringify({
+        status: "ok",
+        type: "tv_episode",
+        tvId,
+        season,
+        episode,
+        id: data.id,
+        name: data.name,
+        overview: data.overview,
+        airDate: data.air_date,
+        episodeNumber: data.episode_number,
+        seasonNumber: data.season_number,
+        stillPath: data.still_path,
+        stillUrl: data.still_path
+          ? `https://image.tmdb.org/t/p/w780${data.still_path}`
+          : null,
+        voteAverage: data.vote_average
+      }, null, 2),
+      {
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+
+  } catch (error) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        tmdb: "episode_failed",
+        message: error.message,
+        stack: error.stack
+      }, null, 2),
+      {
+        status: 500,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+}
+// ---------------------------------------------------------
+// Test TMDB TV Episode
+// GET /test/tmdb/episode?tvId=276501&season=1&episode=1
+// ---------------------------------------------------------
+if (url.pathname === "/test/tmdb/episode") {
+  try {
+    const tvId = Number(
+      url.searchParams.get("tvId")
+    );
+
+    const season = Number(
+      url.searchParams.get("season")
+    );
+
+    const episode = Number(
+      url.searchParams.get("episode")
+    );
+
+    if (
+      !Number.isInteger(tvId) ||
+      tvId <= 0 ||
+      !Number.isInteger(season) ||
+      season < 0 ||
+      !Number.isInteger(episode) ||
+      episode <= 0
+    ) {
+      return new Response(
+        JSON.stringify({
+          status: "error",
+          message:
+            "Tham sá»‘ khÃ´ng há»£p lá»‡. VÃ­ dá»¥: ?tvId=276501&season=1&episode=1"
+        }, null, 2),
+        {
+          status: 400,
+          headers: {
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
+    const data = await getTvEpisodeById(
+      tvId,
+      season,
+      episode,
+      env
+    );
+
+    return new Response(
+      JSON.stringify({
+        status: "ok",
+        type: "tv_episode",
+        tvId,
+        season,
+        episode,
+        id: data.id,
+        name: data.name,
+        overview: data.overview,
+        airDate: data.air_date,
+        episodeNumber: data.episode_number,
+        seasonNumber: data.season_number,
+        stillPath: data.still_path,
+        stillUrl: data.still_path
+          ? `https://image.tmdb.org/t/p/w780${data.still_path}`
+          : null,
+        voteAverage: data.vote_average
+      }, null, 2),
+      {
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+
+  } catch (error) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        tmdb: "episode_failed",
+        message: error.message,
+        stack: error.stack
+      }, null, 2),
+      {
+        status: 500,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+}
+// ---------------------------------------------------------
 // Test TMDB Resolve
 // ---------------------------------------------------------
 if (url.pathname === "/test/tmdb/resolve") {
   try {
+    const testType = url.searchParams.get("type");
+    const testId = url.searchParams.get("id");
+    const testTitle = url.searchParams.get("title");
+    const testYear = url.searchParams.get("year");
+
+    // -----------------------------------------------------
+    // 1. Test TV theo TMDB ID
+    // VÃ­ dá»¥:
+    // /test/tmdb/resolve?type=tv&id=276501
+    // -----------------------------------------------------
+    if (testType === "tv" && testId) {
+      const tv = await resolveTv(
+        {
+          tmdbId: Number(testId),
+          tmdbType: "tv",
+          title: ""
+        },
+        env
+      );
+
+      return new Response(
+        JSON.stringify({
+          status: "ok",
+          type: "tv",
+          mode: "id",
+          tv: {
+            ...tv,
+            posterUrl: getPosterUrl(tv?.posterPath),
+            backdropUrl: getPosterUrl(
+              tv?.backdropPath,
+              "w1280"
+            )
+          }
+        }, null, 2),
+        {
+          headers: {
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
+    // -----------------------------------------------------
+    // 2. Test Movie theo TMDB ID
+    // VÃ­ dá»¥:
+    // /test/tmdb/resolve?type=movie&id=315162
+    // -----------------------------------------------------
+    if (testType === "movie" && testId) {
+      const movie = await resolveMovie(
+        {
+          tmdbId: Number(testId),
+          tmdbType: "movie",
+          title: ""
+        },
+        env
+      );
+
+      return new Response(
+        JSON.stringify({
+          status: "ok",
+          type: "movie",
+          mode: "id",
+          movie: {
+            ...movie,
+            posterUrl: getPosterUrl(movie?.posterPath),
+            backdropUrl: getPosterUrl(
+              movie?.backdropPath,
+              "w1280"
+            )
+          }
+        }, null, 2),
+        {
+          headers: {
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
+    // -----------------------------------------------------
+    // 3. Test TV theo TITLE + YEAR
+    // VÃ­ dá»¥:
+    // /test/tmdb/resolve?type=tv&title=The%20Secret%20Lives%20of%20Animals&year=2024
+    // -----------------------------------------------------
+    if (
+      testType === "tv" &&
+      testTitle
+    ) {
+      const tv = await resolveTv(
+        {
+          tmdbId: null,
+          tmdbType: "tv",
+          title: testTitle,
+          year: testYear
+            ? Number(testYear)
+            : null
+        },
+        env
+      );
+
+      return new Response(
+        JSON.stringify({
+          status: "ok",
+          type: "tv",
+          mode: "search",
+          query: {
+            title: testTitle,
+            year: testYear
+              ? Number(testYear)
+              : null
+          },
+          tv: tv
+            ? {
+                ...tv,
+                posterUrl: getPosterUrl(
+                  tv.posterPath
+                ),
+                backdropUrl: getPosterUrl(
+                  tv.backdropPath,
+                  "w1280"
+                )
+              }
+            : null
+        }, null, 2),
+        {
+          headers: {
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
+    // -----------------------------------------------------
+    // 4. Test Movie theo TITLE + YEAR
+    // -----------------------------------------------------
+    if (
+      testType === "movie" &&
+      testTitle
+    ) {
+      const movie = await resolveMovie(
+        {
+          tmdbId: null,
+          tmdbType: "movie",
+          title: testTitle,
+          year: testYear
+            ? Number(testYear)
+            : null
+        },
+        env
+      );
+
+      return new Response(
+        JSON.stringify({
+          status: "ok",
+          type: "movie",
+          mode: "search",
+          query: {
+            title: testTitle,
+            year: testYear
+              ? Number(testYear)
+              : null
+          },
+          movie: movie
+            ? {
+                ...movie,
+                posterUrl: getPosterUrl(
+                  movie.posterPath
+                ),
+                backdropUrl: getPosterUrl(
+                  movie.backdropPath,
+                  "w1280"
+                )
+              }
+            : null
+        }, null, 2),
+        {
+          headers: {
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
+    // -----------------------------------------------------
+    // 5. KhÃ´ng truyá»n tham sá»‘ â†’ giá»¯ test máº«u
+    // -----------------------------------------------------
     const movie = await resolveMovie(
       {
         tmdbId: 315162,
@@ -2289,7 +3251,6 @@ if (url.pathname === "/test/tmdb/resolve") {
     return new Response(
       JSON.stringify({
         status: "ok",
-
         movie: {
           ...movie,
           posterUrl: getPosterUrl(
@@ -2300,7 +3261,6 @@ if (url.pathname === "/test/tmdb/resolve") {
             "w1280"
           )
         },
-
         tv: {
           ...tv,
           posterUrl: getPosterUrl(
@@ -2507,13 +3467,20 @@ if (url.pathname === "/test/drive/tmdb/all") {
 }
     // ---------------------------------------------------------
     // Test Google Drive -> Parser -> TMDB
-    // Chỉ test 10 file đầu tiên
-    // Không ghi vào D1
+    // Chá»‰ test 10 file Ä‘áº§u tiÃªn
+    // KhÃ´ng ghi vÃ o D1
     // ---------------------------------------------------------
     if (url.pathname === "/test/drive/tmdb") {
       try {
+        const folderId =
+          url.searchParams.get("folderId");
+
         // 1. Scan Google Drive
-        const driveResult = await scanDriveLibrary(env);
+        const driveResult =
+          await scanDriveLibrary(
+            env,
+            folderId || undefined
+          );
 
         const files = Array.isArray(driveResult)
           ? driveResult
@@ -2524,7 +3491,7 @@ if (url.pathname === "/test/drive/tmdb/all") {
               []
             );
 
-        // 2. Lọc file video
+        // 2. Lá»c file video
         const videoFiles = files.filter((file) => {
           return (
             file?.mimeType?.startsWith("video/") ||
@@ -2534,8 +3501,8 @@ if (url.pathname === "/test/drive/tmdb/all") {
           );
         });
 
-        // 3. Chỉ test 10 file đầu tiên
-        const testFiles = videoFiles.slice(0, 10);
+        // 3. Chá»‰ test 10 file Ä‘áº§u tiÃªn
+        const testFiles = videoFiles;
 
         const results = [];
 
@@ -2557,7 +3524,7 @@ if (url.pathname === "/test/drive/tmdb/all") {
               year: parsed.year,
 
               tmdbId:
-                tmdb?.id ??
+                tmdb?.tmdbId ??
                 parsed.tmdbId ??
                 null,
 
@@ -2633,7 +3600,7 @@ if (url.pathname === "/test/drive/tmdb/all") {
           }
         }
 
-        // 5. Tổng kết
+        // 5. Tá»•ng káº¿t
         const success = results.filter(
           (item) => item.status === "ok"
         ).length;
@@ -2692,8 +3659,8 @@ if (url.pathname === "/test/drive/tmdb/all") {
       }
     }
 // ---------------------------------------------------------
-// Tự động refresh rating toàn bộ phim
-// Trình duyệt tự chạy từng batch 5 phim
+// Tá»± Ä‘á»™ng refresh rating toÃ n bá»™ phim
+// TrÃ¬nh duyá»‡t tá»± cháº¡y tá»«ng batch 5 phim
 // ---------------------------------------------------------
 if (url.pathname === "/test/refresh-ratings-all") {
   const html = `
@@ -2738,10 +3705,10 @@ if (url.pathname === "/test/refresh-ratings-all") {
 
 <body>
 
-<h1>TM-LT - Cập nhật Rating</h1>
+<h1>TM-LT - Cáº­p nháº­t Rating</h1>
 
 <div id="status">
-Đang chuẩn bị...
+Äang chuáº©n bá»‹...
 </div>
 
 <div id="log"></div>
@@ -2766,14 +3733,14 @@ async function refreshAllRatings() {
   try {
     while (true) {
       status.textContent =
-        "Đang xử lý...\\\\n" +
+        "Äang xá»­ lÃ½...\\\\n" +
         "Offset: " + offset + "\\\\n" +
-        "Đã xử lý: " + totalProcessed + " phim\\\\n" +
-        "Đã cập nhật: " + totalUpdated + " phim\\\\n" +
-        "Lỗi: " + totalFailed;
+        "ÄÃ£ xá»­ lÃ½: " + totalProcessed + " phim\\\\n" +
+        "ÄÃ£ cáº­p nháº­t: " + totalUpdated + " phim\\\\n" +
+        "Lá»—i: " + totalFailed;
 
       writeLog(
-        "→ Đang xử lý offset " +
+        "â†’ Äang xá»­ lÃ½ offset " +
         offset +
         "..."
       );
@@ -2795,7 +3762,7 @@ async function refreshAllRatings() {
 
       if (data.status !== "ok") {
         throw new Error(
-          data.message || "Batch thất bại"
+          data.message || "Batch tháº¥t báº¡i"
         );
       }
 
@@ -2804,13 +3771,13 @@ async function refreshAllRatings() {
       totalFailed += data.failed || 0;
 
       writeLog(
-        "✓ Offset " +
+        "âœ“ Offset " +
         offset +
         ": " +
         data.updated +
         "/" +
         data.processed +
-        " cập nhật, lỗi " +
+        " cáº­p nháº­t, lá»—i " +
         data.failed
       );
 
@@ -2820,7 +3787,7 @@ async function refreshAllRatings() {
       ) {
         for (const error of data.errors) {
           writeLog(
-            "  ✗ " +
+            "  âœ— " +
             error.title +
             " - " +
             error.error
@@ -2837,48 +3804,48 @@ async function refreshAllRatings() {
 
       offset = data.nextOffset;
 
-      // Nghỉ 300ms giữa các batch
+      // Nghá»‰ 300ms giá»¯a cÃ¡c batch
       await new Promise(
         resolve => setTimeout(resolve, 300)
       );
     }
 
     status.textContent =
-      "HOÀN TẤT!\\\\n\\\\n" +
-      "Đã xử lý: " +
+      "HOÃ€N Táº¤T!\\\\n\\\\n" +
+      "ÄÃ£ xá»­ lÃ½: " +
       totalProcessed +
       " phim\\\\n" +
-      "Đã cập nhật: " +
+      "ÄÃ£ cáº­p nháº­t: " +
       totalUpdated +
       " phim\\\\n" +
-      "Lỗi: " +
+      "Lá»—i: " +
       totalFailed +
       " phim";
 
     writeLog("");
     writeLog("================================");
-    writeLog("HOÀN TẤT");
+    writeLog("HOÃ€N Táº¤T");
     writeLog(
-      "Tổng xử lý: " +
+      "Tá»•ng xá»­ lÃ½: " +
       totalProcessed
     );
     writeLog(
-      "Tổng cập nhật: " +
+      "Tá»•ng cáº­p nháº­t: " +
       totalUpdated
     );
     writeLog(
-      "Tổng lỗi: " +
+      "Tá»•ng lá»—i: " +
       totalFailed
     );
     writeLog("================================");
 
   } catch (error) {
     status.textContent =
-      "CÓ LỖI: " +
+      "CÃ“ Lá»–I: " +
       error.message;
 
     writeLog(
-      "✗ LỖI: " +
+      "âœ— Lá»–I: " +
       error.message
     );
   }
@@ -2900,7 +3867,7 @@ refreshAllRatings();
 }
 // ---------------------------------------------------------
 // Test refresh TMDB rating -> D1
-// Mỗi lần cập nhật tối đa 5 phim
+// Má»—i láº§n cáº­p nháº­t tá»‘i Ä‘a 5 phim
 // ---------------------------------------------------------
 if (url.pathname === "/test/refresh-ratings") {
   try {
@@ -2956,7 +3923,7 @@ if (url.pathname === "/test/refresh-ratings") {
             id: movie.id,
             title: movie.title,
             tmdbId: movie.tmdb_id,
-            error: "Không lấy được voteAverage từ TMDB"
+            error: "KhÃ´ng láº¥y Ä‘Æ°á»£c voteAverage tá»« TMDB"
           });
 
           continue;
@@ -3050,7 +4017,7 @@ if (url.pathname === "/test/refresh-ratings") {
 
 // ---------------------------------------------------------
 // Test Reindex Google Drive -> Parser -> TMDB -> D1
-// Chỉ xử lý file mới hoặc file đã thay đổi
+// Chá»‰ xá»­ lÃ½ file má»›i hoáº·c file Ä‘Ã£ thay Ä‘á»•i
 // ---------------------------------------------------------
 if (url.pathname === "/test/reindex") {
   let jobId = null;
@@ -3058,7 +4025,7 @@ if (url.pathname === "/test/reindex") {
   try {
     // -----------------------------------------------------
     // Batch Reindex
-    // Mặc định mỗi lần xử lý 5 file
+    // Máº·c Ä‘á»‹nh má»—i láº§n xá»­ lÃ½ 5 file
     // -----------------------------------------------------
     const offset = Math.max(
       0,
@@ -3076,7 +4043,7 @@ if (url.pathname === "/test/reindex") {
     const existingJobId =
       Number(url.searchParams.get("jobId") || 0) || null;
         // -----------------------------------------------------
-        // 1. Lấy thư viện đang bật
+        // 1. Láº¥y thÆ° viá»‡n Ä‘ang báº­t
         // -----------------------------------------------------
         const library = await env.tm_lt_db
           .prepare(
@@ -3095,7 +4062,7 @@ if (url.pathname === "/test/reindex") {
                 status: "error",
                 reindex: "library_not_found",
                 message:
-                  "Không tìm thấy thư viện Google Drive đang được bật"
+                  "KhÃ´ng tÃ¬m tháº¥y thÆ° viá»‡n Google Drive Ä‘ang Ä‘Æ°á»£c báº­t"
               },
               null,
               2
@@ -3111,7 +4078,7 @@ if (url.pathname === "/test/reindex") {
         }
 
         // -----------------------------------------------------
-// 2. Tạo job mới hoặc tiếp tục job hiện tại
+// 2. Táº¡o job má»›i hoáº·c tiáº¿p tá»¥c job hiá»‡n táº¡i
 // -----------------------------------------------------
 if (existingJobId) {
   jobId = existingJobId;
@@ -3134,7 +4101,7 @@ if (existingJobId) {
     job.meta?.last_row_id ?? null;
 }
         // -----------------------------------------------------
-        // 3. Scan toàn bộ Google Drive
+        // 3. Scan toÃ n bá»™ Google Drive
         // -----------------------------------------------------
         const driveFiles =
           await scanDriveLibrary(
@@ -3165,7 +4132,7 @@ if (existingJobId) {
           .run();
 
         // -----------------------------------------------------
-        // 4. Danh sách Drive ID hiện tại
+        // 4. Danh sÃ¡ch Drive ID hiá»‡n táº¡i
         // -----------------------------------------------------
         const currentDriveIds =
           new Set(
@@ -3175,7 +4142,7 @@ if (existingJobId) {
           );
 
         // -----------------------------------------------------
-// 5. Bộ đếm
+// 5. Bá»™ Ä‘áº¿m
 // -----------------------------------------------------
 let filesAdded = 0;
 let filesUpdated = 0;
@@ -3185,7 +4152,7 @@ let filesFailed = 0;
 let errors = [];
 
 // -----------------------------------------------------
-// Nếu tiếp tục job cũ thì lấy số liệu đã tích lũy
+// Náº¿u tiáº¿p tá»¥c job cÅ© thÃ¬ láº¥y sá»‘ liá»‡u Ä‘Ã£ tÃ­ch lÅ©y
 // -----------------------------------------------------
 if (existingJobId) {
   const previousJob =
@@ -3224,10 +4191,10 @@ if (existingJobId) {
 }
 
         // -----------------------------------------------------
-        // 6. Xử lý từng file
+        // 6. Xá»­ lÃ½ tá»«ng file
         // -----------------------------------------------------
                 // -----------------------------------------------------
-        // Retry TMDB khi gặp lỗi tạm thời
+        // Retry TMDB khi gáº·p lá»—i táº¡m thá»i
         // -----------------------------------------------------
         const resolveMediaWithRetry =
           async (parsed) => {
@@ -3253,22 +4220,22 @@ if (existingJobId) {
                     message
                   );
 
-                // Không phải lỗi tạm thời
-                // thì không retry
+                // KhÃ´ng pháº£i lá»—i táº¡m thá»i
+                // thÃ¬ khÃ´ng retry
                 if (!isTransient) {
                   throw error;
                 }
 
-                // Đã hết số lần thử
+                // ÄÃ£ háº¿t sá»‘ láº§n thá»­
                 if (
                   attempt === maxAttempts
                 ) {
                   throw error;
                 }
 
-                // Chờ tăng dần:
-                // lần 1 -> 1 giây
-                // lần 2 -> 2 giây
+                // Chá» tÄƒng dáº§n:
+                // láº§n 1 -> 1 giÃ¢y
+                // láº§n 2 -> 2 giÃ¢y
                 await new Promise(
                   (resolve) =>
                     setTimeout(
@@ -3283,7 +4250,7 @@ if (existingJobId) {
           };
 
         // -----------------------------------------------------
-        // 6. Xử lý từng file
+        // 6. Xá»­ lÃ½ tá»«ng file
         // -----------------------------------------------------
 	const batchFiles =
   videoFiles.slice(
@@ -3294,7 +4261,7 @@ if (existingJobId) {
 for (const file of batchFiles) {
           try {
             // -------------------------------------------------
-            // Kiểm tra file đã tồn tại trong D1 chưa
+            // Kiá»ƒm tra file Ä‘Ã£ tá»“n táº¡i trong D1 chÆ°a
             // -------------------------------------------------
             const existing =
               await env.tm_lt_db
@@ -3312,8 +4279,8 @@ for (const file of batchFiles) {
                 .first();
 
             // -------------------------------------------------
-            // Nếu file đã tồn tại và không thay đổi:
-            // BỎ QUA, không gọi Parser, không gọi TMDB
+            // Náº¿u file Ä‘Ã£ tá»“n táº¡i vÃ  khÃ´ng thay Ä‘á»•i:
+            // Bá»Ž QUA, khÃ´ng gá»i Parser, khÃ´ng gá»i TMDB
             // -------------------------------------------------
             if (
               existing &&
@@ -3321,8 +4288,8 @@ for (const file of batchFiles) {
               (existing.drive_modified_time ?? null) ===
                 (file.modifiedTime ?? null)
             ) {
-              // Nếu trước đó bị inactive nhưng hiện đã quay lại
-              // thì chỉ cần kích hoạt lại.
+              // Náº¿u trÆ°á»›c Ä‘Ã³ bá»‹ inactive nhÆ°ng hiá»‡n Ä‘Ã£ quay láº¡i
+              // thÃ¬ chá»‰ cáº§n kÃ­ch hoáº¡t láº¡i.
               if (existing.is_active !== 1) {
                 await env.tm_lt_db
                   .prepare(
@@ -3340,7 +4307,7 @@ for (const file of batchFiles) {
             }
 
             // -------------------------------------------------
-            // File mới hoặc file đã thay đổi
+            // File má»›i hoáº·c file Ä‘Ã£ thay Ä‘á»•i
             // -------------------------------------------------
             const parsed =
               parseFilename(file.name);
@@ -3351,7 +4318,7 @@ for (const file of batchFiles) {
               );
 
             // -------------------------------------------------
-            // Không tìm thấy TMDB
+            // KhÃ´ng tÃ¬m tháº¥y TMDB
             // -------------------------------------------------
             if (!tmdb) {
               filesFailed++;
@@ -3360,7 +4327,7 @@ for (const file of batchFiles) {
                 driveFileId: file.id,
                 fileName: file.name,
                 error:
-                  "Không tìm thấy thông tin TMDB"
+                  "KhÃ´ng tÃ¬m tháº¥y thÃ´ng tin TMDB"
               });
 
               continue;
@@ -3479,7 +4446,7 @@ DO UPDATE SET
 .run();
 
             // -------------------------------------------------
-            // Đếm thêm / cập nhật
+            // Äáº¿m thÃªm / cáº­p nháº­t
             // -------------------------------------------------
             if (existing) {
               filesUpdated++;
@@ -3488,7 +4455,7 @@ DO UPDATE SET
             }
 
             // -------------------------------------------------
-            // Tạo stream nếu chưa có
+            // Táº¡o stream náº¿u chÆ°a cÃ³
             // -------------------------------------------------
             await env.tm_lt_db
               .prepare(
@@ -3518,7 +4485,7 @@ DO UPDATE SET
 
           } catch (fileError) {
             // -------------------------------------------------
-            // Lỗi một file không làm dừng toàn bộ Reindex
+            // Lá»—i má»™t file khÃ´ng lÃ m dá»«ng toÃ n bá»™ Reindex
             // -------------------------------------------------
             filesFailed++;
 
@@ -3533,8 +4500,8 @@ DO UPDATE SET
         }
 
  // -----------------------------------------------------
-// 7. Đánh dấu movie không còn trên Drive là inactive
-// Chỉ thực hiện khi đã xử lý batch cuối cùng
+// 7. ÄÃ¡nh dáº¥u movie khÃ´ng cÃ²n trÃªn Drive lÃ  inactive
+// Chá»‰ thá»±c hiá»‡n khi Ä‘Ã£ xá»­ lÃ½ batch cuá»‘i cÃ¹ng
 // -----------------------------------------------------
 let filesRemoved = 0;
 
@@ -3579,7 +4546,7 @@ if (isLastBatch) {
 }
 
 // -----------------------------------------------------
-// 9. Cập nhật reindex job
+// 9. Cáº­p nháº­t reindex job
 // -----------------------------------------------------
 const finalStatus =
   isLastBatch
@@ -3623,7 +4590,7 @@ await env.tm_lt_db
   .run();
 
         // -----------------------------------------------------
-        // 10. Kết quả
+        // 10. Káº¿t quáº£
         // -----------------------------------------------------
         return new Response(
           JSON.stringify(
@@ -3677,7 +4644,7 @@ nextBatchUrl:
       } catch (error) {
 
         // -----------------------------------------------------
-        // Lỗi toàn bộ Reindex
+        // Lá»—i toÃ n bá»™ Reindex
         // -----------------------------------------------------
         if (jobId !== null) {
           try {
@@ -3698,7 +4665,7 @@ nextBatchUrl:
               )
               .run();
           } catch {
-            // Không che mất lỗi gốc
+            // KhÃ´ng che máº¥t lá»—i gá»‘c
           }
         }
 
@@ -3730,15 +4697,15 @@ nextBatchUrl:
 
     // ---------------------------------------------------------
         // ---------------------------------------------------------
-    // Stremio Catalog - Kho Phim Gia Đình
+    // Stremio Catalog - Kho Phim Gia ÄÃ¬nh
     // ---------------------------------------------------------
     // ---------------------------------------------------------
 // Stremio Catalogs
-// 4 danh mục:
-// 1. Tất cả phim
+// 4 danh má»¥c:
+// 1. Táº¥t cáº£ phim
 // 2. A -> Z
-// 3. Mới nhất
-// 4. Điểm cao
+// 3. Má»›i nháº¥t
+// 4. Äiá»ƒm cao
 // ---------------------------------------------------------
 const catalogMatch =
   url.pathname.match(
@@ -3804,7 +4771,7 @@ if (catalogMatch) {
 
               name:
                 movie.title ||
-                "Không có tên",
+                "KhÃ´ng cÃ³ tÃªn",
 
               releaseInfo:
                 movie.year
@@ -3866,7 +4833,7 @@ if (catalogMatch) {
   }
 }
     // ---------------------------------------------------------
-    // Stremio Meta - Chi tiết phim
+    // Stremio Meta - Chi tiáº¿t phim
     // ---------------------------------------------------------
     if (url.pathname.startsWith("/meta/movie/")) {
       try {
@@ -3938,7 +4905,7 @@ if (catalogMatch) {
                 type: "movie",
                 name:
                   movie.title ||
-                  "Không có tên",
+                  "KhÃ´ng cÃ³ tÃªn",
                 releaseInfo:
                   movie.year
                     ? String(movie.year)
@@ -4052,29 +5019,29 @@ if (url.pathname.startsWith("/stream/movie/")) {
           "";
 
 // ---------------------------------------------------------
-// Nhận diện phiên bản + chất lượng từ tên file
+// Nháº­n diá»‡n phiÃªn báº£n + cháº¥t lÆ°á»£ng tá»« tÃªn file
 // ---------------------------------------------------------
 
 let languageLabel =
-  "🎧 Âm thanh gốc";
+  "ðŸŽ§ Ã‚m thanh gá»‘c";
 
-// Thuyết minh
+// Thuyáº¿t minh
 if (
   /thuyet[\s._-]*minh/i.test(fileName) ||
-  /thuyết[\s._-]*minh/i.test(fileName)
+  /thuyáº¿t[\s._-]*minh/i.test(fileName)
 ) {
   languageLabel =
-    "🇻🇳 Thuyết minh";
+    "ðŸ‡»ðŸ‡³ Thuyáº¿t minh";
 
-// Phụ đề Việt
+// Phá»¥ Ä‘á» Viá»‡t
 } else if (
   /viet[\s._-]*sub/i.test(fileName) ||
   /vietsub/i.test(fileName) ||
   /phu[\s._-]*de/i.test(fileName) ||
-  /phụ[\s._-]*đề/i.test(fileName)
+  /phá»¥[\s._-]*Ä‘á»/i.test(fileName)
 ) {
   languageLabel =
-    "🇻🇳 Phụ đề Việt";
+    "ðŸ‡»ðŸ‡³ Phá»¥ Ä‘á» Viá»‡t";
 
 // English Sub
 } else if (
@@ -4082,12 +5049,12 @@ if (
   /english[\s._-]*sub/i.test(fileName)
 ) {
   languageLabel =
-    "🇬🇧 English Sub";
+    "ðŸ‡¬ðŸ‡§ English Sub";
 }
 
 
 // ---------------------------------------------------------
-// Nhận diện chất lượng
+// Nháº­n diá»‡n cháº¥t lÆ°á»£ng
 // ---------------------------------------------------------
 
 let qualityLabel = "";
@@ -4108,12 +5075,12 @@ if (/\b2160p\b/i.test(fileName)) {
 
 
 // ---------------------------------------------------------
-// Tạo tên Stream hoàn chỉnh
+// Táº¡o tÃªn Stream hoÃ n chá»‰nh
 // ---------------------------------------------------------
 
 const streamTitle =
   qualityLabel
-    ? `${languageLabel} • ${qualityLabel}`
+    ? `${languageLabel} â€¢ ${qualityLabel}`
     : languageLabel;
 
         const streamUrl =
@@ -4123,7 +5090,7 @@ const streamTitle =
 
         return {
           name:
-            "Kho Phim Gia Đình",
+            "Kho Phim Gia ÄÃ¬nh",
           title:
             streamTitle,
           url:
@@ -4291,9 +5258,9 @@ responseHeaders.set(
         JSON.stringify({
           id: "tm-lt-stremio",
           version: "1.0.0",
-          name: "Kho Phim Gia Đình",
+          name: "Kho Phim Gia ÄÃ¬nh",
           description:
-            "Kho phim gia đình từ Google Drive",
+            "Kho phim gia Ä‘Ã¬nh tá»« Google Drive",
           resources: [
             "catalog",
             "meta",
@@ -4307,22 +5274,22 @@ catalogs: [
   {
     type: "movie",
     id: "kho-phim-gia-dinh",
-    name: "🎬 Tất cả phim"
+    name: "ðŸŽ¬ Táº¥t cáº£ phim"
   },
   {
     type: "movie",
     id: "phim-a-z",
-    name: "🔤 Phim A → Z"
+    name: "ðŸ”¤ Phim A â†’ Z"
   },
   {
     type: "movie",
     id: "phim-moi-nhat",
-    name: "📅 Phim mới nhất"
+    name: "ðŸ“… Phim má»›i nháº¥t"
   },
   {
     type: "movie",
     id: "phim-diem-cao",
-    name: "⭐ Phim điểm cao"
+    name: "â­ Phim Ä‘iá»ƒm cao"
   }
 ]
         }, null, 2),
@@ -4343,7 +5310,7 @@ catalogs: [
   },
 async queue(batch, env) {
   console.log(
-    `TM-LT Queue: nhận ${batch.messages.length} message(s)`
+    `TM-LT Queue: nháº­n ${batch.messages.length} message(s)`
   );
 
   for (const message of batch.messages) {
@@ -4355,24 +5322,35 @@ async queue(batch, env) {
         JSON.stringify(job)
       );
 
-      const result = await runReindexWorker(env, {
-        libraryId: job.libraryId,
-        offset: job.offset || 0,
-        batchSize: job.batchSize || 5,
-        existingJobId: job.existingJobId || null,
-        origin: "queue"
-      });
+      // -----------------------------------------------------
+      // Cháº¡y batch hiá»‡n táº¡i
+      // -----------------------------------------------------
 
-      const resultText = await result.clone().text();
+      const result =
+        await runReindexWorker(env, {
+          libraryId: job.libraryId,
+          offset: job.offset || 0,
+          batchSize: job.batchSize || 5,
+          existingJobId:
+            job.existingJobId || null,
+          origin: "queue"
+        });
+
+      const resultText =
+        await result.clone().text();
 
       console.log(
         "TM-LT Queue result:",
         resultText
       );
 
-      const data = JSON.parse(resultText);
+      const data =
+        JSON.parse(resultText);
 
-      // Nếu vẫn còn batch tiếp theo → tự đưa vào Queue
+      // -----------------------------------------------------
+      // 1. Váº«n cÃ²n batch cá»§a thÆ° viá»‡n hiá»‡n táº¡i
+      // -----------------------------------------------------
+
       if (
         data.status === "ok" &&
         data.nextOffset !== null &&
@@ -4380,23 +5358,167 @@ async queue(batch, env) {
         data.nextOffset < data.filesFound
       ) {
         const nextJob = {
-          libraryId: job.libraryId,
-          offset: data.nextOffset,
-          batchSize: job.batchSize || 5,
-          existingJobId: data.jobId
+          ...job,
+
+          libraryId:
+            job.libraryId,
+
+          offset:
+            data.nextOffset,
+
+          batchSize:
+            job.batchSize || 5,
+
+          existingJobId:
+            data.jobId
         };
 
         console.log(
-          "TM-LT Queue: gửi batch tiếp theo:",
+          "TM-LT Queue: gá»­i batch tiáº¿p theo:",
           JSON.stringify(nextJob)
         );
 
-        await env.tm_lt_reindex.send(nextJob);
-      } else {
-        console.log(
-          "TM-LT Queue: Reindex đã hoàn tất."
+        await env.tm_lt_reindex.send(
+          nextJob
         );
+
+      } else {
+
+        // ---------------------------------------------------
+        // 2. ThÆ° viá»‡n hiá»‡n táº¡i Ä‘Ã£ hoÃ n táº¥t
+        // ---------------------------------------------------
+
+        console.log(
+          `TM-LT Queue: thÆ° viá»‡n ${job.libraryId} Ä‘Ã£ hoÃ n táº¥t.`
+        );
+
+        // ---------------------------------------------------
+        // Náº¿u Ä‘Ã¢y lÃ  Reindex táº¥t cáº£
+        // ---------------------------------------------------
+
+        if (
+          job.reindexAll === true &&
+          Array.isArray(job.libraryIds)
+        ) {
+          const currentIndex =
+            Number(job.libraryIndex || 0);
+
+          const nextIndex =
+            currentIndex + 1;
+
+          // -------------------------------------------------
+          // CÃ²n thÆ° viá»‡n tiáº¿p theo
+          // -------------------------------------------------
+
+          if (
+            nextIndex <
+            job.libraryIds.length
+          ) {
+            const nextLibraryId =
+              job.libraryIds[nextIndex];
+
+            console.log(
+              `TM-LT Queue: chuyá»ƒn sang thÆ° viá»‡n ${nextIndex + 1}/${job.libraryIds.length}: ${nextLibraryId}`
+            );
+
+            // -----------------------------------------------
+            // Táº¡o Job má»›i cho thÆ° viá»‡n tiáº¿p theo
+            // -----------------------------------------------
+
+            const nextJobResult =
+              await env.tm_lt_db
+                .prepare(`
+                  INSERT INTO reindex_jobs (
+                    library_id,
+                    status,
+                    started_at,
+                    files_found,
+                    files_added,
+                    files_updated,
+                    files_removed
+                  )
+                  VALUES (
+                    ?,
+                    'queued',
+                    CURRENT_TIMESTAMP,
+                    0,
+                    0,
+                    0,
+                    0
+                  )
+                  RETURNING id
+                `)
+                .bind(nextLibraryId)
+                .first();
+
+            const nextJobId =
+              nextJobResult?.id || null;
+
+            if (!nextJobId) {
+              throw new Error(
+                `KhÃ´ng táº¡o Ä‘Æ°á»£c Reindex Job cho library ${nextLibraryId}`
+              );
+            }
+
+            // -----------------------------------------------
+            // ÄÆ°a thÆ° viá»‡n tiáº¿p theo vÃ o Queue
+            // -----------------------------------------------
+
+            const nextJob = {
+              reindexAll: true,
+
+              libraryIds:
+                job.libraryIds,
+
+              libraryIndex:
+                nextIndex,
+
+              libraryId:
+                nextLibraryId,
+
+              offset: 0,
+
+              batchSize:
+                job.batchSize || 5,
+
+              existingJobId:
+                nextJobId
+            };
+
+            console.log(
+              "TM-LT Queue: gá»­i thÆ° viá»‡n tiáº¿p theo:",
+              JSON.stringify(nextJob)
+            );
+
+            await env.tm_lt_reindex.send(
+              nextJob
+            );
+
+          } else {
+
+            // -----------------------------------------------
+            // ÄÃ£ hoÃ n táº¥t toÃ n bá»™ thÆ° viá»‡n
+            // -----------------------------------------------
+
+            console.log(
+              "TM-LT Queue: Reindex táº¥t cáº£ thÆ° viá»‡n Ä‘Ã£ hoÃ n táº¥t."
+            );
+          }
+        } else {
+
+          // -------------------------------------------------
+          // Reindex má»™t thÆ° viá»‡n bÃ¬nh thÆ°á»ng
+          // -------------------------------------------------
+
+          console.log(
+            "TM-LT Queue: Reindex thÆ° viá»‡n Ä‘Ã£ hoÃ n táº¥t."
+          );
+        }
       }
+
+      // -----------------------------------------------------
+      // XÃ¡c nháº­n message Ä‘Ã£ xá»­ lÃ½
+      // -----------------------------------------------------
 
       message.ack();
 

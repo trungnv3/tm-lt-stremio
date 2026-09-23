@@ -123,7 +123,27 @@ function extractYear(text) {
 
   return Number(matches[0]);
 }
+function extractTvEpisode(text) {
+  const value = String(text || "");
 
+  const match = value.match(
+    /\bS(\d{1,2})E(\d{1,3})\b/i
+  );
+
+  if (!match) {
+    return {
+      season: null,
+      episode: null,
+      tmdbType: null
+    };
+  }
+
+  return {
+    season: Number(match[1]),
+    episode: Number(match[2]),
+    tmdbType: "tv"
+  };
+}
 /**
  * Xác định title trước khi bắt đầu phần release/technical.
  *
@@ -366,11 +386,28 @@ export function parseFilename(filename) {
 
   const year = extractYear(originalFilename);
 
-  let title = cutAtTechnicalSection(originalFilename);
+  const tvEpisode = extractTvEpisode(
+    originalFilename
+  );
+
+  let title = cutAtTechnicalSection(
+    originalFilename
+  );
 
   title = chooseTitlePart(title);
 
+  // Loại S01E01 / S1E1 khỏi title
+  title = title.replace(
+    /\bS\d{1,2}E\d{1,3}\b/gi,
+    " "
+  );
+
   title = cleanTitle(title);
+
+  const tmdbType =
+    manual.tmdbType ||
+    tvEpisode.tmdbType ||
+    null;
 
   const queries = manual.tmdbId
     ? []
@@ -380,8 +417,18 @@ export function parseFilename(filename) {
     filename: originalFilename,
     title,
     year,
-    tmdbId: manual.tmdbId,
-    tmdbType: manual.tmdbType,
+
+    season:
+      tvEpisode.season,
+
+    episode:
+      tvEpisode.episode,
+
+    tmdbId:
+      manual.tmdbId,
+
+    tmdbType,
+
     queries
   };
 }

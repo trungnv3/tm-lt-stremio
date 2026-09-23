@@ -476,7 +476,306 @@ export function pickBestMovieResult(
 
   return candidates[0]?.item || null;
 }
+// ---------------------------------------------------------
+// Chọn kết quả TV phù hợp nhất
+// ---------------------------------------------------------
+export function pickBestTvResult(
+  data,
+  year = null,
+  query = ""
+) {
+  if (
+    !data ||
+    !Array.isArray(data.results) ||
+    data.results.length === 0
+  ) {
+    return null;
+  }
 
+  const normalizeTitle = (value) =>
+    String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[â€™']/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const queryNormalized =
+    normalizeTitle(query);
+
+  const queryCompact =
+    queryNormalized.replace(/\s+/g, "");
+
+  const badContentPatterns = [
+    /\bmaking of\b/i,
+    /\bbehind the scenes\b/i,
+    /\bbehind the scene\b/i,
+    /\bfeaturette\b/i,
+    /\binterview\b/i,
+    /\btrailer\b/i,
+    /\bteaser\b/i,
+    /\bshort\b/i,
+    /\bspecial\b/i,
+    /\bdocumentary\b/i,
+    /\bdocumentaries\b/i,
+    /\bextras\b/i,
+    /\bbonus\b/i,
+    /\bproduction\b/i,
+    /\bbirth story\b/i
+  ];
+
+  function isBadContent(item) {
+    const title =
+      String(item?.name || "");
+
+    const originalTitle =
+      String(item?.original_name || "");
+
+    const combined =
+      `${title} ${originalTitle}`;
+
+    return badContentPatterns.some(
+      (pattern) =>
+        pattern.test(combined)
+    );
+  }
+
+  function getYear(item) {
+    if (!item?.first_air_date) {
+      return null;
+    }
+
+    const value =
+      Number(
+        String(item.first_air_date)
+          .slice(0, 4)
+      );
+
+    return Number.isFinite(value)
+      ? value
+      : null;
+  }
+
+  function getTitleVariants(item) {
+    return [
+      normalizeTitle(item?.name),
+      normalizeTitle(item?.original_name)
+    ].filter(Boolean);
+  }
+
+  function similarityScore(a, b) {
+    if (!a || !b) {
+      return 0;
+    }
+
+    if (a === b) {
+      return 100;
+    }
+
+    if (
+      a.includes(b) ||
+      b.includes(a)
+    ) {
+      return 80;
+    }
+
+    const aWords = new Set(
+      a.split(" ").filter(Boolean)
+    );
+
+    const bWords = new Set(
+      b.split(" ").filter(Boolean)
+    );
+
+    if (
+      aWords.size === 0 ||
+      bWords.size === 0
+    ) {
+      return 0;
+    }
+
+    let common = 0;
+
+    for (const word of aWords) {
+      if (bWords.has(word)) {
+        common++;
+      }
+    }
+
+    const union =
+      new Set([
+        ...aWords,
+        ...bWords
+      ]).size;
+
+    return Math.round(
+      (common / union) * 70
+    );
+  }
+
+  const scored = data.results.map(
+    (item, index) => {
+      const itemYear =
+        getYear(item);
+
+      const titleVariants =
+        getTitleVariants(item);
+
+      let score = 0;
+
+      if (isBadContent(item)) {
+        score -= 1000;
+      }
+
+      let bestTitleScore = 0;
+
+      for (
+        const itemTitle
+        of titleVariants
+      ) {
+        const compactTitle =
+          itemTitle.replace(
+            /\s+/g,
+            ""
+          );
+
+        if (
+          itemTitle === queryNormalized
+        ) {
+          bestTitleScore =
+            Math.max(
+              bestTitleScore,
+              500
+            );
+        } else if (
+          compactTitle ===
+          queryCompact
+        ) {
+          bestTitleScore =
+            Math.max(
+              bestTitleScore,
+              480
+            );
+        } else {
+          bestTitleScore =
+            Math.max(
+              bestTitleScore,
+              similarityScore(
+                itemTitle,
+                queryNormalized
+              )
+            );
+        }
+      }
+
+      score += bestTitleScore;
+
+      if (
+        year &&
+        itemYear === Number(year)
+      ) {
+        score += 300;
+      } else if (
+        year &&
+        itemYear
+      ) {
+        const yearDiff =
+          Math.abs(
+            itemYear -
+            Number(year)
+          );
+
+        if (yearDiff === 1) {
+          score -= 40;
+        } else if (
+          yearDiff === 2
+        ) {
+          score -= 80;
+        } else {
+          score -= 150;
+        }
+      }
+
+      if (item.poster_path) {
+        score += 10;
+      }
+
+      if (
+        typeof item.vote_count ===
+        "number"
+      ) {
+        score += Math.min(
+          item.vote_count / 1000,
+          10
+        );
+      }
+
+      if (
+        typeof item.popularity ===
+        "number"
+      ) {
+        score += Math.min(
+          item.popularity / 10,
+          5
+        );
+      }
+
+      return {
+        item,
+        score,
+        index,
+        itemYear,
+        bestTitleScore,
+        badContent:
+          isBadContent(item)
+      };
+    }
+  );
+
+  const normalResults =
+    scored.filter(
+      (entry) =>
+        !entry.badContent
+    );
+
+  const candidates =
+    normalResults.length > 0
+      ? normalResults
+      : scored;
+
+  candidates.sort(
+    (a, b) => {
+      if (
+        b.score !== a.score
+      ) {
+        return b.score - a.score;
+      }
+
+      const aYearMatch =
+        year &&
+        a.itemYear === Number(year);
+
+      const bYearMatch =
+        year &&
+        b.itemYear === Number(year);
+
+      if (
+        aYearMatch !==
+        bYearMatch
+      ) {
+        return bYearMatch
+          ? 1
+          : -1;
+      }
+
+      return a.index - b.index;
+    }
+  );
+
+  return candidates[0]?.item || null;
+}
 // ---------------------------------------------------------
 // Ghép dữ liệu vi-VN + en-US
 // Ưu tiên vi-VN, thiếu thì dùng en-US
@@ -737,7 +1036,23 @@ export async function resolveTvById(
     english
   );
 }
-
+// ---------------------------------------------------------
+// TV Episode theo ID
+// ---------------------------------------------------------
+export async function getTvEpisodeById(
+  tvId,
+  seasonNumber,
+  episodeNumber,
+  env,
+  language = VI_LANGUAGE
+) {
+  return tmdbFetch(
+    `/tv/${tvId}/season/${seasonNumber}/episode/${episodeNumber}`,
+    env,
+    {},
+    language
+  );
+}
 // ---------------------------------------------------------
 // Resolve Movie theo title + year
 // ---------------------------------------------------------
@@ -811,7 +1126,8 @@ export async function resolveTvBySearch(
   let result =
     pickBestTvResult(
       vietnamese,
-      year
+      year,
+      title
     );
 
   if (!result) {
@@ -826,7 +1142,8 @@ export async function resolveTvBySearch(
     result =
       pickBestTvResult(
         english,
-        year
+        year,
+        title
       );
   }
 
