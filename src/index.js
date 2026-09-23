@@ -5799,9 +5799,9 @@ responseHeaders.set(
         JSON.stringify({
           id: "tm-lt-stremio",
           version: "1.0.0",
-          name: "Kho Phim Gia ÄÃ¬nh",
+          name: "Kho Phim Gia Đình",
           description:
-            "Kho phim gia Ä‘Ã¬nh tá»« Google Drive",
+            "Kho phim gia đình từ Google Drive",
           resources: [
             "catalog",
             "meta",
