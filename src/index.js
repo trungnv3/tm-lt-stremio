@@ -4832,6 +4832,316 @@ if (catalogMatch) {
     }
   }
 }
+// ---------------------------------------------------------
+// Stremio Series Catalogs
+// ---------------------------------------------------------
+const seriesCatalogMatch =
+  url.pathname.match(
+    /^\/catalog\/series\/([^/]+)\.json$/
+  );
+
+if (seriesCatalogMatch) {
+  const catalogId =
+    seriesCatalogMatch[1];
+
+  const catalogOrders = {
+    "kho-series":
+      "title COLLATE NOCASE ASC",
+
+    "series-a-z":
+      "title COLLATE NOCASE ASC",
+
+    "series-moi-nhat":
+      "year DESC, title COLLATE NOCASE ASC",
+
+    "series-diem-cao":
+      "vote_average DESC, title COLLATE NOCASE ASC"
+  };
+
+  const orderBy =
+    catalogOrders[catalogId];
+
+  if (orderBy) {
+    try {
+      const result =
+        await env.tm_lt_db
+          .prepare(
+            `SELECT
+               tmdb_id,
+               tmdb_type,
+               title,
+               year,
+               poster_url,
+               backdrop_url,
+               overview,
+               vote_average
+             FROM movies
+             WHERE is_active = 1
+               AND tmdb_id IS NOT NULL
+               AND tmdb_type = 'tv'
+               AND id IN (
+                 SELECT MIN(id)
+                 FROM movies
+                 WHERE is_active = 1
+                   AND tmdb_id IS NOT NULL
+                   AND tmdb_type = 'tv'
+                 GROUP BY tmdb_id
+               )
+             ORDER BY ${orderBy}`
+          )
+          .all();
+
+      const metas =
+        (result.results || [])
+          .map(
+            (series) => ({
+              id:
+                `series:${series.tmdb_id}`,
+
+              type:
+                "series",
+
+              name:
+                series.title ||
+                "Không có tên",
+
+              releaseInfo:
+                series.year
+                  ? String(series.year)
+                  : undefined,
+
+              poster:
+                series.poster_url ||
+                undefined,
+
+              background:
+                series.backdrop_url ||
+                undefined,
+
+              description:
+                series.overview ||
+                undefined
+            })
+          );
+
+      return new Response(
+        JSON.stringify(
+          {
+            metas
+          },
+          null,
+          2
+        ),
+        {
+          headers: {
+            ...CORS_HEADERS,
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+
+    } catch (error) {
+      return new Response(
+        JSON.stringify(
+          {
+            metas: [],
+            error:
+              error?.message ||
+              String(error)
+          },
+          null,
+          2
+        ),
+        {
+          status: 500,
+          headers: {
+            ...CORS_HEADERS,
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+  }
+}
+// ---------------------------------------------------------
+// Stremio Meta - Chi tiết Series
+// ---------------------------------------------------------
+if (url.pathname.startsWith("/meta/series/")) {
+  try {
+    const metaId =
+      decodeURIComponent(
+        url.pathname
+          .replace("/meta/series/", "")
+          .replace(".json", "")
+      );
+
+    const tmdbId =
+      metaId.startsWith("series:")
+        ? metaId.replace("series:", "")
+        : metaId;
+
+    const series =
+      await env.tm_lt_db
+        .prepare(
+          `SELECT
+             tmdb_id,
+             tmdb_type,
+             title,
+             year,
+             poster_url,
+             backdrop_url,
+             overview,
+             genres
+           FROM movies
+           WHERE tmdb_id = ?
+             AND tmdb_type = 'tv'
+             AND is_active = 1
+           LIMIT 1`
+        )
+        .bind(Number(tmdbId))
+        .first();
+
+    if (!series) {
+      return new Response(
+        JSON.stringify({
+          meta: null
+        }),
+        {
+          status: 404,
+          headers: {
+            ...CORS_HEADERS,
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
+    let genres = [];
+
+    try {
+      genres =
+        series.genres
+          ? JSON.parse(series.genres)
+          : [];
+    } catch {
+      genres = [];
+    }
+
+    const episodeResult =
+      await env.tm_lt_db
+        .prepare(
+          `SELECT
+             tmdb_id,
+             title,
+             year,
+             season,
+             episode,
+             drive_name
+           FROM movies
+           WHERE tmdb_id = ?
+             AND tmdb_type = 'tv'
+             AND is_active = 1
+             AND season IS NOT NULL
+             AND episode IS NOT NULL
+           ORDER BY season ASC, episode ASC`
+        )
+        .bind(Number(tmdbId))
+        .all();
+
+    const videos =
+      (episodeResult.results || [])
+        .map(
+          (item) => ({
+            id:
+              `${item.tmdb_id}:${item.season}:${item.episode}`,
+
+            title:
+              item.drive_name ||
+              item.title ||
+              `Tập ${item.episode}`,
+
+            season:
+              Number(item.season),
+
+            episode:
+              Number(item.episode)
+          })
+        );
+
+    return new Response(
+      JSON.stringify(
+        {
+          meta: {
+            id:
+              `series:${series.tmdb_id}`,
+
+            type:
+              "series",
+
+            name:
+              series.title ||
+              "Không có tên",
+
+            releaseInfo:
+              series.year
+                ? String(series.year)
+                : undefined,
+
+            poster:
+              series.poster_url ||
+              undefined,
+
+            background:
+              series.backdrop_url ||
+              undefined,
+
+            description:
+              series.overview ||
+              undefined,
+
+            genres,
+
+            videos
+          }
+        },
+        null,
+        2
+      ),
+      {
+        headers: {
+          ...CORS_HEADERS,
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+
+  } catch (error) {
+    return new Response(
+      JSON.stringify(
+        {
+          meta: null,
+          error:
+            error?.message ||
+            String(error)
+        },
+        null,
+        2
+      ),
+      {
+        status: 500,
+        headers: {
+          ...CORS_HEADERS,
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+}
     // ---------------------------------------------------------
     // Stremio Meta - Chi tiáº¿t phim
     // ---------------------------------------------------------
@@ -4956,6 +5266,236 @@ if (catalogMatch) {
         );
       }
     }
+// ---------------------------------------------------------
+// Stremio Stream - Series Episode
+// ---------------------------------------------------------
+if (url.pathname.startsWith("/stream/series/")) {
+  try {
+    const streamId =
+      decodeURIComponent(
+        url.pathname
+          .replace("/stream/series/", "")
+          .replace(".json", "")
+      );
+
+    const parts =
+      streamId.split(":");
+
+    if (parts.length !== 3) {
+      return new Response(
+        JSON.stringify({
+          streams: []
+        }),
+        {
+          status: 400,
+          headers: {
+            ...CORS_HEADERS,
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
+    const tmdbId =
+      Number(parts[0]);
+
+    const season =
+      Number(parts[1]);
+
+    const episode =
+      Number(parts[2]);
+
+    if (
+      !Number.isInteger(tmdbId) ||
+      !Number.isInteger(season) ||
+      !Number.isInteger(episode)
+    ) {
+      return new Response(
+        JSON.stringify({
+          streams: []
+        }),
+        {
+          status: 400,
+          headers: {
+            ...CORS_HEADERS,
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
+    const result =
+      await env.tm_lt_db
+        .prepare(
+          `SELECT
+             m.id,
+             m.tmdb_id,
+             m.title,
+             m.drive_name,
+             m.season,
+             m.episode,
+             s.drive_file_id
+           FROM movies m
+           INNER JOIN streams s
+             ON s.movie_id = m.id
+           WHERE m.tmdb_id = ?
+             AND m.season = ?
+             AND m.episode = ?
+             AND m.tmdb_type = 'tv'
+             AND m.is_active = 1
+             AND s.stream_type = 'google_drive'
+           ORDER BY m.id ASC`
+        )
+        .bind(
+          tmdbId,
+          season,
+          episode
+        )
+        .all();
+
+    const episodes =
+      result.results || [];
+
+    if (episodes.length === 0) {
+      return new Response(
+        JSON.stringify({
+          streams: []
+        }),
+        {
+          status: 404,
+          headers: {
+            ...CORS_HEADERS,
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
+    const streams =
+      episodes.map(
+        (movie) => {
+
+          const fileName =
+            movie.drive_name ||
+            "";
+
+          // ---------------------------------------------------------
+          // Nhận diện phiên bản + chất lượng
+          // ---------------------------------------------------------
+
+          let languageLabel =
+            "🎧 Âm thanh gốc";
+
+          if (
+            /thuyet[\s._-]*minh/i.test(fileName) ||
+            /thuyết[\s._-]*minh/i.test(fileName)
+          ) {
+            languageLabel =
+              "🇻🇳 Thuyết minh";
+
+          } else if (
+            /viet[\s._-]*sub/i.test(fileName) ||
+            /vietsub/i.test(fileName) ||
+            /phu[\s._-]*de/i.test(fileName) ||
+            /phụ[\s._-]*đề/i.test(fileName)
+          ) {
+            languageLabel =
+              "🇻🇳 Phụ đề Việt";
+
+          } else if (
+            /eng[\s._-]*sub/i.test(fileName) ||
+            /english[\s._-]*sub/i.test(fileName)
+          ) {
+            languageLabel =
+              "🇬🇧 English Sub";
+          }
+
+          // ---------------------------------------------------------
+          // Nhận diện chất lượng
+          // ---------------------------------------------------------
+
+          let qualityLabel = "";
+
+          if (/\b2160p\b/i.test(fileName)) {
+            qualityLabel = "4K";
+          } else if (/\b1440p\b/i.test(fileName)) {
+            qualityLabel = "1440p";
+          } else if (/\b1080p\b/i.test(fileName)) {
+            qualityLabel = "1080p";
+          } else if (/\b720p\b/i.test(fileName)) {
+            qualityLabel = "720p";
+          } else if (/\b576p\b/i.test(fileName)) {
+            qualityLabel = "576p";
+          } else if (/\b480p\b/i.test(fileName)) {
+            qualityLabel = "480p";
+          }
+
+          const streamTitle =
+            qualityLabel
+              ? `${languageLabel} • ${qualityLabel}`
+              : languageLabel;
+
+          const streamUrl =
+            `${url.origin}/file/${encodeURIComponent(
+              movie.drive_file_id
+            )}`;
+
+          return {
+            name:
+              "Kho Phim Gia Đình",
+
+            title:
+              streamTitle,
+
+            url:
+              streamUrl
+          };
+        }
+      );
+
+    return new Response(
+      JSON.stringify(
+        {
+          streams
+        },
+        null,
+        2
+      ),
+      {
+        headers: {
+          ...CORS_HEADERS,
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+
+  } catch (error) {
+    return new Response(
+      JSON.stringify(
+        {
+          streams: [],
+          error:
+            error?.message ||
+            String(error)
+        },
+        null,
+        2
+      ),
+      {
+        status: 500,
+        headers: {
+          ...CORS_HEADERS,
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+}
 // ---------------------------------------------------------
 // Stremio Stream - Google Drive Proxy
 // ---------------------------------------------------------
@@ -5270,28 +5810,55 @@ responseHeaders.set(
             "movie",
             "series"
           ],
-catalogs: [
-  {
-    type: "movie",
-    id: "kho-phim-gia-dinh",
-    name: "ðŸŽ¬ Táº¥t cáº£ phim"
-  },
-  {
-    type: "movie",
-    id: "phim-a-z",
-    name: "ðŸ”¤ Phim A â†’ Z"
-  },
-  {
-    type: "movie",
-    id: "phim-moi-nhat",
-    name: "ðŸ“… Phim má»›i nháº¥t"
-  },
-  {
-    type: "movie",
-    id: "phim-diem-cao",
-    name: "â­ Phim Ä‘iá»ƒm cao"
-  }
-]
+          catalogs: [
+            // ---------------------------------------------------------
+            // MOVIE
+            // ---------------------------------------------------------
+            {
+              type: "movie",
+              id: "kho-phim-gia-dinh",
+              name: "🎬 Tất cả phim"
+            },
+            {
+              type: "movie",
+              id: "phim-a-z",
+              name: "🔤 Phim A → Z"
+            },
+            {
+              type: "movie",
+              id: "phim-moi-nhat",
+              name: "📅 Phim mới nhất"
+            },
+            {
+              type: "movie",
+              id: "phim-diem-cao",
+              name: "⭐ Phim điểm cao"
+            },
+
+            // ---------------------------------------------------------
+            // SERIES
+            // ---------------------------------------------------------
+            {
+              type: "series",
+              id: "kho-series",
+              name: "📺 Tất cả series"
+            },
+            {
+              type: "series",
+              id: "series-a-z",
+              name: "🔤 Series A → Z"
+            },
+            {
+              type: "series",
+              id: "series-moi-nhat",
+              name: "📅 Series mới nhất"
+            },
+            {
+              type: "series",
+              id: "series-diem-cao",
+              name: "⭐ Series điểm cao"
+            }
+          ]
         }, null, 2),
         {
           headers: {
