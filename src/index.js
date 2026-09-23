@@ -4753,6 +4753,7 @@ if (catalogMatch) {
   FROM movies
   WHERE is_active = 1
     AND tmdb_id IS NOT NULL
+    AND tmdb_type = 'movie'
   GROUP BY tmdb_id
 )
              ORDER BY ${orderBy}`
