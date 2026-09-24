@@ -1145,7 +1145,40 @@ export default {
   </div>
 
 
-  <!-- ADD LIBRARY -->
+  <!-- CHECK MOVIE -->
+  <div class="card">
+
+    <div class="section-title">
+      <h2>🔎 Kiểm tra phim trong kho</h2>
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <label>Tên file phim</label>
+
+      <input
+        id="checkMovieFilename"
+        type="text"
+        placeholder="Ví dụ: Bao 2018 1080p Blu-ray DTSHD-MA 7.1 HEVC- DDR[EtHD].mkv"
+        style="width:100%;"
+      >
+    </div>
+
+    <button onclick="checkMovie()">
+      🔍 Kiểm tra
+    </button>
+
+    <div
+      id="checkMovieResult"
+      class="status"
+      style="margin-top:15px;"
+    >
+      Nhập tên file rồi bấm "Kiểm tra".
+    </div>
+
+  </div>
+
+
+  <!-- ADD LIBRARY -->  
 <div class="card">
 
   <div class="section-title">
@@ -1257,7 +1290,247 @@ function toggleAddForm(force) {
 function getHeaders() {
     return { "Authorization": "Bearer " + adminSecret };
 }
+async function checkMovie() {
+    const input =
+        document.getElementById("checkMovieFilename");
 
+    const result =
+        document.getElementById("checkMovieResult");
+
+    const filename =
+        input.value.trim();
+
+    if (!adminSecret) {
+        result.innerHTML =
+            '<span style="color:#f87171">' +
+            'Vui lòng nhập REINDEX_SECRET và xác thực trước.' +
+            '</span>';
+
+        return;
+    }
+
+    if (!filename) {
+        result.innerHTML =
+            '<span style="color:#f87171">' +
+            'Vui lòng nhập tên file phim.' +
+            '</span>';
+
+        return;
+    }
+
+    result.innerHTML =
+        '<span style="color:#fbbf24">' +
+        '⏳ Đang phân tích tên file và kiểm tra TMDB...' +
+        '</span>';
+
+    try {
+        const response =
+            await fetch(
+                "/admin/check-movie",
+                {
+                    method: "POST",
+
+                    headers: {
+                        ...getHeaders(),
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        filename: filename
+                    })
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.message ||
+                "Không thể kiểm tra phim."
+            );
+        }
+
+        // -------------------------------------------------
+        // Không tìm thấy TMDB
+        // -------------------------------------------------
+
+        if (!data.tmdb) {
+
+            result.innerHTML =
+                '<div style="color:#f87171;font-weight:600;">' +
+                '❌ Không xác định được phim trên TMDB' +
+                '</div>' +
+
+                '<div style="margin-top:8px;">' +
+                '<strong>Tên file:</strong><br>' +
+                escapeHtml(filename) +
+                '</div>' +
+
+                '<div style="margin-top:8px;">' +
+                '<strong>Tên nhận diện:</strong> ' +
+                escapeHtml(
+                    data.parsed?.title ||
+                    "Không xác định"
+                ) +
+                '</div>';
+
+            return;
+        }
+
+        const tmdb =
+            data.tmdb;
+
+        const matches =
+            data.matches || [];
+
+        // -------------------------------------------------
+        // ĐÃ CÓ
+        // -------------------------------------------------
+
+        if (data.found) {
+
+            let html =
+                '<div style="color:#4ade80;font-size:18px;font-weight:700;">' +
+                '✅ ĐÃ CÓ TRONG KHO' +
+                '</div>';
+
+            html +=
+                '<div style="margin-top:12px;">' +
+                '<strong>🎬 Phim:</strong> ' +
+                escapeHtml(
+                    tmdb.title ||
+                    data.parsed?.title ||
+                    ""
+                ) +
+                '</div>';
+
+            if (tmdb.originalTitle) {
+                html +=
+                    '<div>' +
+                    '<strong>Tên gốc:</strong> ' +
+                    escapeHtml(
+                        tmdb.originalTitle
+                    ) +
+                    '</div>';
+            }
+
+            html +=
+                '<div>' +
+                '<strong>📅 Năm:</strong> ' +
+                escapeHtml(
+                    String(
+                        tmdb.year ||
+                        data.parsed?.year ||
+                        ""
+                    )
+                ) +
+                '</div>';
+
+            html +=
+                '<div>' +
+                '<strong>🆔 TMDB:</strong> ' +
+                escapeHtml(
+                    String(tmdb.tmdbId)
+                ) +
+                '</div>';
+
+            html +=
+                '<div style="margin-top:15px;font-weight:600;">' +
+                '📁 File đang có trong kho:' +
+                '</div>';
+
+            html +=
+                '<div style="margin-top:8px;">';
+
+            for (const item of matches) {
+
+                html +=
+                    '<div style="' +
+                    'padding:10px;' +
+                    'margin-bottom:8px;' +
+                    'border-radius:8px;' +
+                    'background:rgba(255,255,255,0.05);' +
+                    '">' +
+
+                    '<div>' +
+                    '<strong>📚 Thư viện:</strong> ' +
+                    escapeHtml(
+                        item.library_name ||
+                        "Không xác định"
+                    ) +
+                    '</div>' +
+
+                    '<div style="margin-top:4px;">' +
+                    '<strong>📄 File:</strong> ' +
+                    escapeHtml(
+                        item.drive_name ||
+                        ""
+                    ) +
+                    '</div>' +
+
+                    '</div>';
+            }
+
+            html += '</div>';
+
+            result.innerHTML = html;
+
+            return;
+        }
+
+        // -------------------------------------------------
+        // CHƯA CÓ
+        // -------------------------------------------------
+
+        result.innerHTML =
+            '<div style="color:#fbbf24;font-size:18px;font-weight:700;">' +
+            '🆕 CHƯA CÓ TRONG KHO' +
+            '</div>' +
+
+            '<div style="margin-top:12px;">' +
+            '<strong>🎬 Phim:</strong> ' +
+            escapeHtml(
+                tmdb.title ||
+                data.parsed?.title ||
+                ""
+            ) +
+            '</div>' +
+
+            '<div>' +
+            '<strong>📅 Năm:</strong> ' +
+            escapeHtml(
+                String(
+                    tmdb.year ||
+                    data.parsed?.year ||
+                    ""
+                )
+            ) +
+            '</div>' +
+
+            '<div>' +
+            '<strong>🆔 TMDB:</strong> ' +
+            escapeHtml(
+                String(tmdb.tmdbId)
+            ) +
+            '</div>' +
+
+            '<div style="margin-top:10px;">' +
+            'Phim này chưa được tìm thấy trong các thư viện hiện tại.' +
+            '</div>';
+
+    } catch (error) {
+
+        result.innerHTML =
+            '<span style="color:#f87171">' +
+            '❌ ' +
+            escapeHtml(
+                error.message
+            ) +
+            '</span>';
+    }
+}
 async function loadLibraries() {
     adminSecret = document.getElementById("secret").value.trim();
     const authStatus = document.getElementById("authStatus");
@@ -2486,7 +2759,273 @@ if (
     }
   );
 }
+// ---------------------------------------------------------
+// Admin - Kiểm tra phim đã có trong kho hay chưa
+// POST /admin/check-movie
+// ---------------------------------------------------------
+if (
+  url.pathname === "/admin/check-movie" &&
+  request.method === "POST"
+) {
+  // -------------------------------------------------------
+  // Kiểm tra REINDEX_SECRET
+  // -------------------------------------------------------
+  const authorization =
+    request.headers.get("Authorization") || "";
 
+  const match =
+    authorization.match(/^Bearer\s+(.+)$/i);
+
+  if (
+    !match ||
+    !env.REINDEX_SECRET ||
+    match[1].trim() !== env.REINDEX_SECRET
+  ) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Unauthorized"
+      }),
+      {
+        status: 401,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+
+  try {
+    // -----------------------------------------------------
+    // Nhận tên file
+    // -----------------------------------------------------
+    const body = await request.json();
+
+    let filename =
+      typeof body?.filename === "string"
+        ? body.filename.trim()
+        : "";
+
+    if (!filename) {
+      return new Response(
+        JSON.stringify({
+          status: "error",
+          message: "Vui lòng nhập tên file phim."
+        }),
+        {
+          status: 400,
+          headers: {
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
+    // -----------------------------------------------------
+    // Chuẩn hóa tên file
+    // -----------------------------------------------------
+    filename =
+      filename
+        .replace(/\\\[/g, "[")
+        .replace(/\\\]/g, "]")
+        .trim();
+
+    console.log(
+      "TM-LT Check Movie:",
+      filename
+    );
+
+    // -----------------------------------------------------
+    // Parser
+    // -----------------------------------------------------
+    const parsed =
+      parseFilename(filename);
+
+    console.log(
+      "TM-LT Check Movie parsed:",
+      JSON.stringify(parsed)
+    );
+
+    // -----------------------------------------------------
+    // Nếu parser xác định đây là TV series
+    // thì không kiểm tra vào kho movie
+    // -----------------------------------------------------
+    if (
+      parsed.tmdbType === "tv" ||
+      parsed.season != null ||
+      parsed.episode != null
+    ) {
+      return new Response(
+        JSON.stringify({
+          status: "ok",
+          found: false,
+          type: "tv",
+          parsed,
+          tmdb: null,
+          matches: [],
+          message:
+            "Tên file này được nhận diện là TV series, không phải phim movie."
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
+    // -----------------------------------------------------
+    // Resolve TMDB
+    // -----------------------------------------------------
+    const tmdb =
+      await resolveMedia(
+        {
+          ...parsed,
+          tmdbType: "movie"
+        },
+        env
+      );
+
+    // -----------------------------------------------------
+    // Không tìm được TMDB
+    // -----------------------------------------------------
+    if (
+      !tmdb ||
+      !tmdb.tmdbId
+    ) {
+      return new Response(
+        JSON.stringify({
+          status: "ok",
+          found: false,
+          parsed,
+          tmdb: null,
+          matches: [],
+          message:
+            "Không tìm thấy phim tương ứng trên TMDB."
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type":
+              "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
+    console.log(
+      "TM-LT Check Movie TMDB:",
+      JSON.stringify(tmdb)
+    );
+
+    // -----------------------------------------------------
+    // Tìm trong D1
+    //
+    // Quan trọng:
+    // Không tìm theo tên file.
+    // Tìm theo TMDB ID để các bản release khác nhau
+    // vẫn được nhận diện là cùng một phim.
+    // -----------------------------------------------------
+    const result =
+      await env.tm_lt_db
+        .prepare(`
+          SELECT
+            m.id,
+            m.drive_file_id,
+            m.drive_name,
+            m.year,
+            m.tmdb_id,
+            m.tmdb_type,
+            m.is_active,
+            m.library_id,
+            l.name AS library_name
+          FROM movies m
+          LEFT JOIN libraries l
+            ON l.id = m.library_id
+          WHERE
+            m.tmdb_id = ?
+            AND m.tmdb_type = 'movie'
+            AND m.is_active = 1
+          ORDER BY
+            l.name ASC,
+            m.drive_name ASC
+        `)
+        .bind(Number(tmdb.tmdbId))
+        .all();
+
+    const matches =
+      result?.results || [];
+
+    // -----------------------------------------------------
+    // Kết quả
+    // -----------------------------------------------------
+    return new Response(
+      JSON.stringify({
+        status: "ok",
+        found: matches.length > 0,
+        type: "movie",
+
+        parsed,
+
+        tmdb: {
+          tmdbId: tmdb.tmdbId,
+          title:
+            tmdb.title ||
+            parsed.title ||
+            "",
+          originalTitle:
+            tmdb.originalTitle ||
+            null,
+          year:
+            tmdb.year ||
+            parsed.year ||
+            null
+        },
+
+        matches,
+
+        message:
+          matches.length > 0
+            ? "Phim đã có trong kho."
+            : "Phim chưa có trong kho."
+      }),
+      {
+        status: 200,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+
+  } catch (error) {
+
+    console.error(
+      "TM-LT Check Movie error:",
+      error
+    );
+
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message:
+          error?.message ||
+          "Lỗi khi kiểm tra phim."
+      }),
+      {
+        status: 500,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+}
 // ---------------------------------------------------------
 // POST /admin/reindex/:id
 // ---------------------------------------------------------
