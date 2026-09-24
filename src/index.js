@@ -1145,85 +1145,94 @@ export default {
   </div>
 
 
-  <!-- LIBRARIES -->
-  <div class="card">
+  <!-- ADD LIBRARY -->
+<div class="card">
 
-    <div class="section-title library-section-title">
-    <div>
-        <h2>Thư viện Google Drive</h2>
-        <span id="library-count" class="library-count"></span>
-    </div>
+  <div class="section-title">
+    <h2>➕ Thêm thư viện Google Drive</h2>
+  </div>
 
+  <div style="margin-bottom:10px;">
     <button
-        class="btn btn-primary"
-        onclick="reindexAllLibraries()"
+      class="secondary"
+      onclick="toggleAddForm()"
     >
-        🔄 Reindex tất cả
+      + Thêm thư viện
     </button>
-</div>
+  </div>
 
-<div
-    id="reindex-all-status"
-    class="reindex-all-status"
-    style="display:none;"
-></div>
+  <!-- ADD LIBRARY FORM -->
+  <div id="addForm" class="add-form">
 
-    <div id="libraries">
-      Chưa tải danh sách.
-    </div>
+    <label>Tên thư viện</label>
 
+    <input
+      id="libraryName"
+      placeholder="Ví dụ: Phim Hoạt Hình"
+    >
 
-    <div style="margin-top:10px;">
+    <label>
+      Google Drive Folder ID hoặc URL
+    </label>
+
+    <input
+      id="folderInput"
+      placeholder="Folder ID hoặc URL thư mục Drive"
+    >
+
+    <div class="add-actions">
+
+      <button onclick="addLibrary()">
+        Lưu danh sách
+      </button>
 
       <button
         class="secondary"
-        onclick="toggleAddForm()"
+        onclick="toggleAddForm(false)"
       >
-        + Thêm thư viện
+        Hủy
       </button>
-
-    </div>
-
-
-    <!-- ADD LIBRARY FORM -->
-
-    <div id="addForm" class="add-form">
-
-      <label>Tên thư viện</label>
-
-      <input
-        id="libraryName"
-        placeholder="Ví dụ: Phim Hoạt Hình"
-      >
-
-      <label>
-        Google Drive Folder ID hoặc URL
-      </label>
-
-      <input
-        id="folderInput"
-        placeholder="Folder ID hoặc URL thư mục Drive"
-      >
-
-      <div class="add-actions">
-
-        <button onclick="addLibrary()">
-          Lưu danh sách
-        </button>
-
-        <button
-          class="secondary"
-          onclick="toggleAddForm(false)"
-        >
-          Hủy
-        </button>
-
-      </div>
 
     </div>
 
   </div>
 
+</div>
+
+
+<!-- LIBRARIES -->
+<div class="card">
+
+  <div class="section-title library-section-title">
+
+    <div>
+      <h2>📚 Thư viện Google Drive</h2>
+      <span
+        id="library-count"
+        class="library-count"
+      ></span>
+    </div>
+
+    <button
+      class="btn btn-primary"
+      onclick="reindexAllLibraries()"
+    >
+      🔄 Reindex tất cả
+    </button>
+
+  </div>
+
+  <div
+    id="reindex-all-status"
+    class="reindex-all-status"
+    style="display:none;"
+  ></div>
+
+  <div id="libraries">
+    Chưa tải danh sách.
+  </div>
+
+</div>
 
   <div class="footer-note">
 
@@ -1277,7 +1286,7 @@ async function loadLibraries() {
 
 function renderLibraries(libraries) {
     const container = document.getElementById("libraries");
-    const count = document.getElementById("libraryCount");
+    const count = document.getElementById("library-count");
 
     count.textContent = libraries.length + " thư viện";
 
@@ -1418,6 +1427,246 @@ async function reindexAllLibraries() {
             "</strong>";
     }
 }
+async function startPollingReindexAll(totalLibraries, firstJobId) {
+    const statusElement =
+        document.getElementById("reindex-all-status");
+
+    if (!statusElement) return;
+
+    const librariesResponse =
+        await fetch("/admin/libraries", {
+            method: "GET",
+            headers: getHeaders()
+        });
+
+    const librariesData =
+        await librariesResponse.json();
+
+    if (!librariesResponse.ok) {
+        throw new Error(
+            librariesData.message ||
+            "Không lấy được danh sách thư viện"
+        );
+    }
+
+    const libraries =
+        librariesData.libraries || [];
+
+    let currentIndex = 0;
+    let currentJobId = firstJobId;
+
+    function showError(message) {
+        statusElement.innerHTML =
+            "<strong style='color:#f87171'>✕ " +
+            escapeHtml(message) +
+            "</strong>";
+    }
+
+    async function pollCurrentJob() {
+        try {
+            const response =
+                await fetch(
+                    "/admin/reindex/status/" +
+                    currentJobId,
+                    {
+                        method: "GET",
+                        headers: getHeaders()
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.message ||
+                    "Không lấy được trạng thái Reindex"
+                );
+            }
+
+            const job = data.job;
+
+            const library =
+                libraries.find(
+                    item =>
+                        Number(item.id) ===
+                        Number(job.library_id)
+                );
+
+            const libraryName =
+                library?.name ||
+                ("Thư viện " +
+                    (currentIndex + 1));
+
+            if (
+                job.status === "queued" ||
+                job.status === "running"
+            ) {
+                statusElement.innerHTML =
+                    "<strong>⟳ Đang Reindex...</strong>" +
+                    "<br>" +
+                    "Thư viện " +
+                    (currentIndex + 1) +
+                    "/" +
+                    totalLibraries +
+                    ": " +
+                    escapeHtml(libraryName) +
+                    "<br>" +
+                    "Job ID: " +
+                    job.id +
+                    "<br>" +
+                    "Files tìm thấy: " +
+                    (job.files_found ?? 0);
+
+                setTimeout(
+                    pollCurrentJob,
+                    3000
+                );
+
+                return;
+            }
+
+            if (
+                job.status === "completed" ||
+                job.status === "completed_with_errors"
+            ) {
+                statusElement.innerHTML =
+                    "<strong style='color:#4ade80'>✓ " +
+                    escapeHtml(libraryName) +
+                    " đã hoàn tất</strong>" +
+                    "<br>" +
+                    "Thư viện " +
+                    (currentIndex + 1) +
+                    "/" +
+                    totalLibraries +
+                    "<br>" +
+                    "Files tìm thấy: " +
+                    (job.files_found ?? 0) +
+                    "<br>" +
+                    "Thêm mới: " +
+                    (job.files_added ?? 0) +
+                    "<br>" +
+                    "Cập nhật: " +
+                    (job.files_updated ?? 0) +
+                    "<br>" +
+                    "Xóa/ngừng hoạt động: " +
+                    (job.files_removed ?? 0);
+
+                currentIndex++;
+
+                if (
+                    currentIndex >=
+                    totalLibraries
+                ) {
+                    statusElement.innerHTML +=
+                        "<br><br><strong style='color:#4ade80'>" +
+                        "✓ Reindex tất cả thư viện đã hoàn tất" +
+                        "</strong>";
+
+                    return;
+                }
+
+                setTimeout(
+                    findNextJob,
+                    2000
+                );
+
+                return;
+            }
+
+            if (job.status === "failed") {
+                showError(
+                    "Reindex thất bại tại " +
+                    libraryName +
+                    ". Job ID: " +
+                    job.id +
+                    (job.error_message
+                        ? " - " +
+                          job.error_message
+                        : "")
+                );
+
+                return;
+            }
+
+            setTimeout(
+                pollCurrentJob,
+                3000
+            );
+
+        } catch (error) {
+            showError(error.message);
+        }
+    }
+
+    async function findNextJob() {
+        try {
+            const nextLibrary =
+                libraries[currentIndex];
+
+            if (!nextLibrary) {
+                showError(
+                    "Không tìm thấy thư viện tiếp theo"
+                );
+
+                return;
+            }
+
+            statusElement.innerHTML =
+                "<strong>⏳ Đang chờ Queue tạo Job tiếp theo...</strong>" +
+                "<br>" +
+                "Thư viện " +
+                (currentIndex + 1) +
+                "/" +
+                totalLibraries +
+                ": " +
+                escapeHtml(
+                    nextLibrary.name ||
+                    ("Thư viện " +
+                        (currentIndex + 1))
+                );
+
+            const response =
+                await fetch(
+                    "/admin/reindex/latest/" +
+                    nextLibrary.id,
+                    {
+                        method: "GET",
+                        headers: getHeaders()
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.message ||
+                    "Không tìm được Job tiếp theo"
+                );
+            }
+
+            if (!data.job) {
+                setTimeout(
+                    findNextJob,
+                    2000
+                );
+
+                return;
+            }
+
+            currentJobId =
+                data.job.id;
+
+            pollCurrentJob();
+
+        } catch (error) {
+            showError(error.message);
+        }
+    }
+
+    pollCurrentJob();
+}    
 function startPolling(libraryId, jobId) {
     if (pollTimers[libraryId]) {
         clearInterval(pollTimers[libraryId]);
@@ -1515,10 +1764,6 @@ function escapeHtml(value) {
         }
       });
     }
-
-    // ---------------------------------------------------------
-    // Admin - Quản lý thư viện
-    // ---------------------------------------------------------
     // ---------------------------------------------------------
     // Admin - Quản lý thư viện
     // ---------------------------------------------------------
@@ -1936,7 +2181,118 @@ if (
     }
   );
 }
+// ---------------------------------------------------------
+// Admin - Lấy Reindex Job mới nhất của thư viện
+// GET /admin/reindex/latest/:libraryId
+// ---------------------------------------------------------
+if (
+  url.pathname.startsWith("/admin/reindex/latest/") &&
+  request.method === "GET"
+) {
+  const authorization =
+    request.headers.get("Authorization");
 
+  if (!authorization) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Unauthorized"
+      }),
+      {
+        status: 401,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+
+  const match =
+    authorization.match(/^Bearer\s+(.+)$/i);
+
+  if (
+    !match ||
+    !env.REINDEX_SECRET ||
+    match[1].trim() !== env.REINDEX_SECRET
+  ) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Unauthorized"
+      }),
+      {
+        status: 401,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+
+  const libraryId = Number(
+    url.pathname.replace(
+      "/admin/reindex/latest/",
+      ""
+    )
+  );
+
+  if (
+    !Number.isInteger(libraryId) ||
+    libraryId <= 0
+  ) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Library ID không hợp lệ"
+      }),
+      {
+        status: 400,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+
+  const job =
+    await env.tm_lt_db
+      .prepare(`
+        SELECT
+          id,
+          library_id,
+          status,
+          started_at,
+          finished_at,
+          files_found,
+          files_added,
+          files_updated,
+          files_removed,
+          error_message
+        FROM reindex_jobs
+        WHERE library_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+      `)
+      .bind(libraryId)
+      .first();
+
+  return new Response(
+    JSON.stringify({
+      status: "ok",
+      job: job || null
+    }, null, 2),
+    {
+      status: 200,
+      headers: {
+        "content-type":
+          "application/json; charset=UTF-8"
+      }
+    }
+  );
+}
 // ---------------------------------------------------------
 // Admin - Reindex tất cả thư viện
 // POST /admin/reindex-all
@@ -6101,3 +6457,5 @@ async queue(batch, env) {
   }
 }
 };
+
+
