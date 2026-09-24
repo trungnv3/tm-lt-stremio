@@ -6232,7 +6232,118 @@ responseHeaders.set(
       { status: 404 }
     );
   },
-async queue(batch, env) {
+
+  // ---------------------------------------------------------
+  // Cloudflare Cron
+  // Chạy tự động lúc 06:00 sáng giờ Việt Nam
+  // ---------------------------------------------------------
+  async scheduled(controller, env, ctx) {
+    console.log(
+      "TM-LT Cron: bắt đầu Reindex tất cả thư viện."
+    );
+
+    try {
+      // Lấy danh sách tất cả thư viện
+      const libraryResult =
+        await env.tm_lt_db
+          .prepare(`
+            SELECT id
+            FROM libraries
+            ORDER BY id ASC
+          `)
+          .all();
+
+      const libraryList =
+        libraryResult?.results || [];
+
+      if (libraryList.length === 0) {
+        console.log(
+          "TM-LT Cron: không có thư viện để Reindex."
+        );
+        return;
+      }
+
+      const libraryIds =
+        libraryList.map(
+          library => library.id
+        );
+
+      const firstLibrary =
+        libraryList[0];
+
+      // Tạo Job đầu tiên
+      const firstJobResult =
+        await env.tm_lt_db
+          .prepare(`
+            INSERT INTO reindex_jobs (
+              library_id,
+              status,
+              started_at,
+              files_found,
+              files_added,
+              files_updated,
+              files_removed
+            )
+            VALUES (
+              ?,
+              'queued',
+              CURRENT_TIMESTAMP,
+              0,
+              0,
+              0,
+              0
+            )
+            RETURNING id
+          `)
+          .bind(firstLibrary.id)
+          .first();
+
+      const firstJobId =
+        firstJobResult?.id || null;
+
+      if (!firstJobId) {
+        throw new Error(
+          "Không tạo được Reindex Job đầu tiên."
+        );
+      }
+
+      // Đưa thư viện đầu tiên vào Queue
+      await env.tm_lt_reindex.send({
+        reindexAll: true,
+
+        libraryIds,
+
+        libraryIndex: 0,
+
+        libraryId:
+          firstLibrary.id,
+
+        offset: 0,
+
+        batchSize: 5,
+
+        existingJobId:
+          firstJobId,
+
+        origin: "cron"
+      });
+
+      console.log(
+        `TM-LT Cron: đã đưa ${libraryIds.length} thư viện vào chuỗi Reindex.`
+      );
+
+    } catch (error) {
+      console.error(
+        "TM-LT Cron error:",
+        error
+      );
+    }
+  },
+
+  // ---------------------------------------------------------
+  // Cloudflare Queue
+  // ---------------------------------------------------------
+  async queue(batch, env) {
   console.log(
     `TM-LT Queue: nhận ${batch.messages.length} message(s)`
   );
