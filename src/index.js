@@ -1,4 +1,4 @@
-﻿import {
+import {
   testDriveConnection,
   scanDriveLibrary,
   getDriveFileStream
@@ -1067,6 +1067,148 @@ export default {
     animation: progress 1.2s infinite ease-in-out;
   }
 
+  .admin-nav {
+    display: none;
+    position: sticky;
+    top: 10px;
+    z-index: 5;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 8px;
+    margin-bottom: 12px;
+    background: rgba(11, 15, 20, 0.92);
+    border: 1px solid #202733;
+    border-radius: 12px;
+    backdrop-filter: blur(12px);
+  }
+
+  .admin-nav.is-ready {
+    display: flex;
+  }
+
+  .admin-nav button {
+    flex: 0 0 auto;
+    background: transparent;
+    border-color: transparent;
+    color: #aab3c2;
+  }
+
+  .admin-nav button.is-active {
+    background: #1d4ed8;
+    color: #fff;
+  }
+
+  .admin-panel {
+    display: none;
+  }
+
+  .admin-panel.is-active {
+    display: block;
+  }
+
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin: 10px 0 14px;
+  }
+
+  .dashboard-stat {
+    padding: 12px;
+    border: 1px solid #253141;
+    border-radius: 10px;
+    background: #0c1117;
+  }
+
+  .dashboard-stat-label {
+    color: #8b95a5;
+    font-size: 11px;
+  }
+
+  .dashboard-stat-value {
+    margin-top: 5px;
+    color: #f8fafc;
+    font-size: 22px;
+    font-weight: 750;
+  }
+
+  .dashboard-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .job-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .job-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px;
+    border-radius: 9px;
+    background: #0c1117;
+    border: 1px solid #202733;
+  }
+
+  .job-meta {
+    color: #8b95a5;
+    font-size: 11px;
+    margin-top: 3px;
+  }
+
+  .status-pill {
+    align-self: flex-start;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: #263244;
+    color: #dbeafe;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .status-pill.completed {
+    background: #143321;
+    color: #86efac;
+  }
+
+  .status-pill.failed {
+    background: #3a1d22;
+    color: #fca5a5;
+  }
+
+  .status-pill.running,
+  .status-pill.queued {
+    background: #3b2c13;
+    color: #fde68a;
+  }
+
+  #toastContainer {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 10;
+    display: grid;
+    gap: 8px;
+    max-width: min(360px, calc(100vw - 32px));
+  }
+
+  .toast {
+    padding: 11px 13px;
+    border-radius: 10px;
+    background: #172033;
+    border: 1px solid #334155;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+    color: #e5e7eb;
+    font-size: 13px;
+  }
+
+  .toast.success { border-color: #166534; }
+  .toast.error { border-color: #991b1b; }
+
   @keyframes progress {
     0% {
       transform: translateX(-130%);
@@ -1100,6 +1242,10 @@ export default {
     }
 
     .status-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dashboard-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
@@ -1144,9 +1290,43 @@ export default {
 
   </div>
 
+  <nav id="adminNav" class="admin-nav" aria-label="Điều hướng quản trị">
+    <button type="button" data-admin-tab="overview" onclick="showAdminTab('overview')">Tổng quan</button>
+    <button type="button" data-admin-tab="libraries" onclick="showAdminTab('libraries')">Thư viện</button>
+    <button type="button" data-admin-tab="movies" onclick="showAdminTab('movies')">Phim</button>
+    <button type="button" data-admin-tab="duplicates" onclick="showAdminTab('duplicates')">Phim trùng</button>
+  </nav>
+
+  <section id="panel-overview" class="card admin-panel" data-panel="overview">
+    <div class="section-title">
+      <div>
+        <h2>📊 Tổng quan vận hành</h2>
+        <div class="count">Số liệu chỉ đọc từ thư viện hiện tại</div>
+      </div>
+      <button class="secondary" type="button" onclick="loadDashboard()">↻ Làm mới</button>
+    </div>
+
+    <div id="dashboardStats" class="dashboard-grid">
+      <div class="dashboard-stat"><div class="dashboard-stat-label">Đang tải</div><div class="dashboard-stat-value">…</div></div>
+    </div>
+
+    <div class="dashboard-actions">
+      <button type="button" onclick="showAdminTab('libraries')">📚 Quản lý thư viện</button>
+      <button class="secondary" type="button" onclick="showAdminTab('movies')">🎬 Quản lý phim</button>
+      <button class="secondary" type="button" onclick="showAdminTab('duplicates')">🧹 Kiểm tra phim trùng</button>
+    </div>
+
+    <div class="section-title" style="margin-top:18px;">
+      <h2>Hoạt động Reindex gần đây</h2>
+    </div>
+    <div id="recentJobs" class="job-list status">Chưa tải hoạt động.</div>
+  </section>
+
+  <div id="toastContainer" aria-live="polite"></div>
+
 
   <!-- CHECK MOVIE -->
-  <div class="card">
+  <div class="card admin-panel" data-panel="movies">
 
     <div class="section-title">
       <h2>🔎 Kiểm tra phim trong kho</h2>
@@ -1178,8 +1358,79 @@ export default {
   </div>
 
 
-  <!-- ADD LIBRARY -->  
-<div class="card">
+  <!-- DUPLICATE MOVIES -->
+  <div class="card admin-panel" data-panel="duplicates">
+
+    <div class="section-title">
+      <h2>🧹 Kiểm tra phim trùng trong kho</h2>
+    </div>
+
+    <div style="margin-bottom:10px;color:#8b95a5;font-size:13px;">
+      Tìm các phim movie có nhiều bản trong các thư viện Google Drive, kèm dung lượng và vị trí kho.
+    </div>
+
+    <button onclick="loadDuplicateMovies()">
+      🔄 Quét lại danh sách phim trùng
+    </button>
+
+    <div
+      id="duplicateMovieResult"
+      class="status"
+      style="margin-top:15px;"
+    >
+      Chưa quét danh sách phim trùng.
+    </div>
+
+
+  </div>
+
+  <!-- MOVIE VISIBILITY -->
+  <div class="card admin-panel" data-panel="movies">
+
+    <div class="section-title">
+      <h2>👁️ Ẩn / hiện phim trong kho</h2>
+    </div>
+
+    <div style="margin-bottom:12px;color:#8b95a5;font-size:13px;">
+      Tìm phim trong thư viện, sau đó ẩn khỏi danh mục Stremio
+      hoặc hiện lại mà không xóa phim khỏi Google Drive.
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+
+      <input
+        id="visibilitySearch"
+        placeholder="Nhập tên phim..."
+        style="flex:1;min-width:200px;"
+      >
+
+      <select id="visibilityStatus" style="min-width:150px;">
+        <option value="all">Tất cả trạng thái</option>
+        <option value="visible">Đang hiển thị</option>
+        <option value="hidden">Đang bị ẩn</option>
+      </select>
+
+      <button onclick="loadMoviesVisibility()">
+        🔍 Tìm phim
+      </button>
+
+    </div>
+
+
+<div
+  id="movieVisibilityResult"
+  class="status"
+  style="margin-top:12px; max-height:420px; overflow-y:auto; overflow-x:hidden; padding-right:8px;"
+>
+
+      Nhập tên phim hoặc bấm "Tìm phim" để tải danh sách.
+    </div>
+
+  </div>
+
+  <!-- ADD LIBRARY -->
+<div class="card admin-panel" data-panel="libraries">
+
 
   <div class="section-title">
     <h2>➕ Thêm thư viện Google Drive</h2>
@@ -1234,7 +1485,7 @@ export default {
 
 
 <!-- LIBRARIES -->
-<div class="card">
+<div class="card admin-panel" data-panel="libraries">
 
   <div class="section-title library-section-title">
 
@@ -1281,6 +1532,165 @@ export default {
 let adminSecret = "";
 let pollTimers = {};
 
+function showToast(message, type) {
+    const container = document.getElementById("toastContainer");
+
+    if (!container) {
+        return;
+    }
+
+    const toast = document.createElement("div");
+    toast.className = "toast " + (type || "");
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    setTimeout(() => toast.remove(), 4000);
+}
+
+function showAdminTab(tab) {
+    if (!adminSecret) {
+        showToast("Hãy xác thực trước khi quản lý kho phim.", "error");
+        return;
+    }
+
+    document.querySelectorAll(".admin-panel").forEach(panel => {
+        panel.classList.toggle(
+            "is-active",
+            panel.dataset.panel === tab
+        );
+    });
+
+    document.querySelectorAll("[data-admin-tab]").forEach(button => {
+        button.classList.toggle(
+            "is-active",
+            button.dataset.adminTab === tab
+        );
+    });
+
+    if (tab === "overview") {
+        loadDashboard();
+    }
+
+    if (tab === "movies") {
+        loadMoviesVisibility();
+    }
+}
+
+function setAdminReady() {
+    const nav = document.getElementById("adminNav");
+
+    if (nav) {
+        nav.classList.add("is-ready");
+    }
+
+    showAdminTab("overview");
+}
+
+function dashboardStat(label, value) {
+    return '<div class="dashboard-stat">' +
+        '<div class="dashboard-stat-label">' +
+        escapeHtml(label) +
+        '</div>' +
+        '<div class="dashboard-stat-value">' +
+        escapeHtml(String(value ?? 0)) +
+        '</div>' +
+        '</div>';
+}
+
+function formatJobStatus(status) {
+    const labels = {
+        queued: "Đang chờ",
+        running: "Đang chạy",
+        completed: "Hoàn tất",
+        completed_with_errors: "Hoàn tất có lỗi",
+        failed: "Thất bại"
+    };
+
+    return labels[status] || status || "Không rõ";
+}
+
+function renderDashboard(data) {
+    const stats = data.stats || {};
+    const statsElement = document.getElementById("dashboardStats");
+    const jobsElement = document.getElementById("recentJobs");
+
+    if (statsElement) {
+        statsElement.innerHTML = [
+            dashboardStat("Thư viện", stats.libraries),
+            dashboardStat("Phim đang hiển thị", stats.visibleMovies),
+            dashboardStat("Phim đã ẩn", stats.hiddenMovies),
+            dashboardStat("Nhóm phim trùng", stats.duplicateMovies)
+        ].join("");
+    }
+
+    if (!jobsElement) {
+        return;
+    }
+
+    const jobs = data.recentJobs || [];
+
+    if (!jobs.length) {
+        jobsElement.textContent = "Chưa có lịch sử Reindex.";
+        return;
+    }
+
+    jobsElement.innerHTML = jobs.map(job => {
+        const status = String(job.status || "unknown");
+        const summary = [
+            "Tìm thấy: " + Number(job.files_found || 0),
+            "Thêm: " + Number(job.files_added || 0),
+            "Cập nhật: " + Number(job.files_updated || 0)
+        ].join(" · ");
+
+        return '<div class="job-item">' +
+            '<div>' +
+            '<strong>' + escapeHtml(job.library_name || "Thư viện đã xóa") + '</strong>' +
+            '<div class="job-meta">' +
+            escapeHtml(summary) +
+            (job.error_message
+                ? " · " + escapeHtml(job.error_message)
+                : "") +
+            '</div>' +
+            '</div>' +
+            '<span class="status-pill ' + escapeHtml(status) + '">' +
+            escapeHtml(formatJobStatus(status)) +
+            '</span>' +
+            '</div>';
+    }).join("");
+}
+
+async function loadDashboard() {
+    const statsElement = document.getElementById("dashboardStats");
+    const jobsElement = document.getElementById("recentJobs");
+
+    if (!adminSecret || !statsElement || !jobsElement) {
+        return;
+    }
+
+    statsElement.innerHTML = dashboardStat("Đang tải", "…");
+    jobsElement.textContent = "Đang tải hoạt động…";
+
+    try {
+        const response = await fetch("/admin/dashboard", {
+            method: "GET",
+            headers: getHeaders()
+        });
+        const data = await response.json();
+
+        if (!response.ok || data.status !== "ok") {
+            throw new Error(data.message || "Không thể tải tổng quan.");
+        }
+
+        renderDashboard(data);
+    } catch (error) {
+        statsElement.innerHTML = dashboardStat("Không tải được", "!");
+        jobsElement.innerHTML =
+            '<span class="error">' +
+            escapeHtml(error.message || "Đã xảy ra lỗi.") +
+            '</span>';
+    }
+}
+
 function toggleAddForm(force) {
     const form = document.getElementById("addForm");
     const open = typeof force === "boolean" ? force : !form.classList.contains("open");
@@ -1290,6 +1700,376 @@ function toggleAddForm(force) {
 function getHeaders() {
     return { "Authorization": "Bearer " + adminSecret };
 }
+function formatFileSize(bytes) {
+    const value = Number(bytes);
+
+    if (!Number.isFinite(value) || value < 0) {
+        return "Không rõ";
+    }
+
+    if (value < 1024) {
+        return value + " B";
+    }
+
+    const units = ["KB", "MB", "GB", "TB"];
+    let size = value;
+    let unitIndex = -1;
+
+    do {
+        size /= 1024;
+        unitIndex++;
+    } while (size >= 1024 && unitIndex < units.length - 1);
+
+    return size.toFixed(size >= 100 ? 0 : size >= 10 ? 1 : 2) + " " + units[unitIndex];
+}
+
+async function loadDuplicateMovies() {
+    const result = document.getElementById("duplicateMovieResult");
+
+    if (!adminSecret) {
+        result.innerHTML =
+            '<span style="color:#f87171">' +
+            'Vui lòng nhập REINDEX_SECRET và xác thực trước.' +
+            '</span>';
+        return;
+    }
+
+    result.innerHTML =
+        '<span style="color:#fbbf24">' +
+        '⏳ Đang quét danh sách phim trùng trong D1...' +
+        '</span>';
+
+    try {
+        const response = await fetch(
+            "/admin/duplicate-movies",
+            {
+                method: "GET",
+                headers: getHeaders()
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.message ||
+                "Không thể quét phim trùng."
+            );
+        }
+
+        const duplicateMovies =
+            data.duplicateMovies || [];
+
+        if (duplicateMovies.length === 0) {
+            result.innerHTML =
+                '<div style="color:#4ade80;font-size:18px;font-weight:700;">' +
+                '✅ KHÔNG CÓ PHIM TRÙNG' +
+                '</div>' +
+                '<div style="margin-top:8px;">' +
+                'Không có movie nào xuất hiện từ 2 bản trở lên trong các thư viện đang hoạt động.' +
+                '</div>';
+            return;
+        }
+
+        let html =
+            '<div style="color:#fbbf24;font-size:18px;font-weight:700;">' +
+            '⚠️ PHÁT HIỆN ' +
+            escapeHtml(String(data.duplicateMovieCount)) +
+            ' PHIM TRÙNG' +
+            '</div>';
+
+        html +=
+            '<div style="margin-top:8px;line-height:1.7;">' +
+            '📄 Tổng số bản: <strong>' +
+            escapeHtml(String(data.duplicateCopyCount)) +
+            '</strong><br>' +
+            '💾 Tổng dung lượng các bản trùng: <strong>' +
+            escapeHtml(formatFileSize(data.totalDuplicateBytes)) +
+            '</strong>' +
+            '</div>';
+
+        html += '<div style="margin-top:15px;">';
+
+        for (const movie of duplicateMovies) {
+            html +=
+                '<div style="' +
+                'padding:14px;' +
+                'margin-bottom:12px;' +
+                'border-radius:10px;' +
+                'background:rgba(255,255,255,0.05);' +
+                'border:1px solid rgba(255,255,255,0.08);' +
+                '">' +
+
+                '<div style="font-size:17px;font-weight:700;">' +
+                '🎬 ' +
+                escapeHtml(movie.title || "Không có tên") +
+                '</div>' +
+
+                '<div style="margin-top:4px;color:#9ca3af;">' +
+                'TMDB: ' +
+                escapeHtml(String(movie.tmdbId)) +
+                (movie.year ? ' • ' + escapeHtml(String(movie.year)) : '') +
+                ' • ' +
+                escapeHtml(String(movie.copyCount)) +
+                ' bản' +
+                '</div>' +
+
+                '<div style="margin-top:4px;">' +
+                '💾 Tổng: <strong>' +
+                escapeHtml(formatFileSize(movie.totalBytes)) +
+                '</strong>' +
+                '</div>' +
+
+                '<div style="margin-top:12px;">';
+
+            for (const item of movie.copies || []) {
+                const fileUrl =
+                    item.driveFileId
+                        ? 'https://drive.google.com/file/d/' + encodeURIComponent(item.driveFileId) + '/view'
+                        : '';
+
+                const folderUrl =
+                    item.folderId
+                        ? 'https://drive.google.com/drive/folders/' + encodeURIComponent(item.folderId)
+                        : '';
+
+                html +=
+                    '<div style="' +
+                    'padding:10px;' +
+                    'margin-bottom:8px;' +
+                    'border-radius:8px;' +
+                    'background:rgba(0,0,0,0.16);' +
+                    '">' +
+
+                    '<div>' +
+                    '<strong>📚 Thư viện:</strong> ' +
+                    escapeHtml(item.libraryName || "Không xác định") +
+                    '</div>' +
+
+                    '<div style="margin-top:4px;word-break:break-word;">' +
+                    '<strong>📄 File:</strong> ' +
+                    escapeHtml(item.driveName || "") +
+                    '</div>' +
+
+                    '<div style="margin-top:4px;">' +
+                    '<strong>💾 Dung lượng:</strong> ' +
+                    escapeHtml(formatFileSize(item.driveSize)) +
+                    '</div>' +
+
+                    '<div style="margin-top:4px;color:#9ca3af;font-size:12px;word-break:break-all;">' +
+                    '<strong>📂 Folder ID:</strong> ' +
+                    escapeHtml(item.folderId || "Không rõ") +
+                    '</div>';
+
+                if (fileUrl || folderUrl) {
+                    html += '<div style="margin-top:8px;">';
+
+                    if (fileUrl) {
+                        html +=
+                            '<a href="' + fileUrl + '" target="_blank" rel="noopener noreferrer" style="margin-right:12px;">📄 Mở file</a>';
+                    }
+
+                    if (folderUrl) {
+                        html +=
+                            '<a href="' + folderUrl + '" target="_blank" rel="noopener noreferrer">📂 Mở thư viện</a>';
+                    }
+
+                    html += '</div>';
+                }
+
+                html += '</div>';
+            }
+
+            html +=
+                '</div>' +
+                '</div>';
+        }
+
+        html += '</div>';
+        result.innerHTML = html;
+
+    } catch (error) {
+        result.innerHTML =
+            '<span style="color:#f87171">❌ ' +
+            escapeHtml(error.message) +
+            '</span>';
+    }
+}
+
+async function loadMoviesVisibility() {
+  const result =
+      document.getElementById("movieVisibilityResult");
+
+  const search =
+      document.getElementById("visibilitySearch").value.trim();
+
+  const status =
+      document.getElementById("visibilityStatus").value;
+
+  if (!adminSecret) {
+      result.innerHTML =
+          '<span style="color:#f87171">' +
+          'Vui lòng nhập REINDEX_SECRET và xác thực trước.' +
+          '</span>';
+      return;
+  }
+
+  result.innerHTML =
+      '<span style="color:#fbbf24">Đang tải danh sách phim...</span>';
+
+  try {
+      const params = new URLSearchParams();
+      params.set("q", search);
+      params.set("status", status);
+
+      const response = await fetch(
+          "/admin/movies-visibility?" + params.toString(),
+          {
+              method: "GET",
+              headers: getHeaders()
+          }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || data.status !== "ok") {
+          throw new Error(
+              data.message || "Không thể tải danh sách phim."
+          );
+      }
+
+      const movies = data.movies || [];
+
+      if (movies.length === 0) {
+          result.innerHTML =
+              '<div style="color:#9ca3af;">Không tìm thấy phim phù hợp.</div>';
+          return;
+      }
+
+      let html =
+          '<div style="margin-bottom:12px;color:#9ca3af;">' +
+          'Tìm thấy ' + movies.length + ' phim (tối đa 100 kết quả).' +
+          '</div>';
+
+      for (const movie of movies) {
+          const hidden = movie.is_hidden === true ||
+              Number(movie.is_hidden) === 1;
+
+          const title = escapeHtml(
+              movie.title || movie.drive_name || "Không có tên"
+          );
+
+          const year = movie.year
+              ? ' (' + escapeHtml(String(movie.year)) + ')'
+              : "";
+
+          const library = escapeHtml(
+              movie.library_name || "Không rõ thư viện"
+          );
+
+          html +=
+              '<div style="' +
+                  'display:flex;' +
+                  'justify-content:space-between;' +
+                  'align-items:center;' +
+                  'gap:12px;' +
+                  'flex-wrap:wrap;' +
+                  'padding:12px;' +
+                  'margin-bottom:8px;' +
+                  'border:1px solid rgba(148,163,184,0.2);' +
+                  'border-radius:8px;' +
+              '">' +
+
+                  '<div style="flex:1;min-width:200px;">' +
+                      '<div style="font-weight:600;">' +
+                          title + year +
+                      '</div>' +
+                      '<div style="font-size:12px;color:#9ca3af;margin-top:4px;">' +
+                          'Thư viện: ' + library +
+                      '</div>' +
+                      '<div style="font-size:12px;color:' +
+                          (hidden ? '#fbbf24' : '#34d399') +
+                          ';margin-top:4px;">' +
+                          (hidden ? 'Đang bị ẩn khỏi danh mục' : 'Đang hiển thị trong danh mục') +
+                      '</div>' +
+                  '</div>' +
+
+                  '<button ' +
+                      'class="' + (hidden ? 'secondary' : '') + '" ' +
+                      'onclick="setMovieVisibility(' +
+                          Number(movie.id) + ',' + (!hidden) +
+                      ')">' +
+                      (hidden ? 'Hiện phim' : 'Ẩn phim') +
+                  '</button>' +
+
+              '</div>';
+      }
+
+      result.innerHTML = html;
+
+  } catch (error) {
+      result.innerHTML =
+          '<span style="color:#f87171">' +
+          escapeHtml(error.message || "Đã xảy ra lỗi.") +
+          '</span>';
+  }
+}
+
+async function setMovieVisibility(movieId, isHidden) {
+  const result =
+      document.getElementById("movieVisibilityResult");
+
+  if (!adminSecret) {
+      result.innerHTML =
+          '<span style="color:#f87171">' +
+          'Vui lòng nhập REINDEX_SECRET và xác thực trước.' +
+          '</span>';
+      return;
+  }
+
+  const action = isHidden ? "ẩn" : "hiện";
+
+  if (!confirm("Bạn có chắc muốn " + action + " phim này khỏi danh mục Stremio?")) {
+      return;
+  }
+
+  try {
+      result.innerHTML =
+          '<span style="color:#fbbf24">Đang cập nhật trạng thái phim...</span>';
+
+      const response = await fetch("/admin/movie-visibility", {
+          method: "POST",
+          headers: {
+              ...getHeaders(),
+              "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+              movieId: movieId,
+              isHidden: isHidden
+          })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.status !== "ok") {
+          throw new Error(
+              data.message || "Không thể cập nhật trạng thái phim."
+          );
+      }
+
+      await loadMoviesVisibility();
+      loadDashboard();
+
+      alert(data.message || "Đã cập nhật trạng thái phim.");
+
+  } catch (error) {
+      result.innerHTML =
+          '<span style="color:#f87171">' +
+          escapeHtml(error.message || "Đã xảy ra lỗi.") +
+          '</span>';
+  }
+}
+
 async function checkMovie() {
     const input =
         document.getElementById("checkMovieFilename");
@@ -1552,6 +2332,7 @@ async function loadLibraries() {
 
         authStatus.innerHTML = '<span style="color:#4ade80">✓ Đã xác thực thành công</span>';
         renderLibraries(data.libraries || []);
+        setAdminReady();
     } catch (error) {
         authStatus.innerHTML = '<span style="color:#f87171">✕ ' + escapeHtml(error.message) + '</span>';
     }
@@ -1633,6 +2414,8 @@ async function reindexLibrary(libraryId) {
         if (data.jobId) {
             startPolling(libraryId, data.jobId);
         }
+
+        loadDashboard();
     } catch (error) {
         statusElement.innerHTML = '<strong>✕ ' + escapeHtml(error.message) + '</strong>';
     }
@@ -1689,6 +2472,8 @@ async function reindexAllLibraries() {
                 data.jobId
             );
         }
+
+        loadDashboard();
 
     } catch (error) {
 
@@ -2056,6 +2841,139 @@ function escapeHtml(value) {
     ) {
       return addLibrary(request, env);
     }
+
+// ---------------------------------------------------------
+// Admin - Tổng quan vận hành (chỉ đọc)
+// GET /admin/dashboard
+// ---------------------------------------------------------
+if (
+  url.pathname === "/admin/dashboard" &&
+  request.method === "GET"
+) {
+  const authorization =
+    request.headers.get("Authorization") || "";
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+
+  if (
+    !match ||
+    !env.REINDEX_SECRET ||
+    match[1].trim() !== env.REINDEX_SECRET
+  ) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Unauthorized"
+      }),
+      {
+        status: 401,
+        headers: {
+          "content-type": "application/json; charset=UTF-8",
+          ...CORS_HEADERS
+        }
+      }
+    );
+  }
+
+  try {
+    const [libraryCount, movieStats, duplicateCount, recentJobs] =
+      await Promise.all([
+        env.tm_lt_db
+          .prepare("SELECT COUNT(*) AS count FROM libraries")
+          .first(),
+        env.tm_lt_db
+          .prepare(`
+            SELECT
+              COUNT(*) AS total_movies,
+              COALESCE(SUM(CASE
+                WHEN is_active = 1 AND is_hidden = 0 THEN 1
+                ELSE 0
+              END), 0) AS visible_movies,
+              COALESCE(SUM(CASE
+                WHEN is_active = 1 AND is_hidden = 1 THEN 1
+                ELSE 0
+              END), 0) AS hidden_movies
+            FROM movies
+          `)
+          .first(),
+        env.tm_lt_db
+          .prepare(`
+            SELECT COUNT(*) AS count
+            FROM (
+              SELECT tmdb_id
+              FROM movies
+              WHERE
+                is_active = 1
+                AND tmdb_type = 'movie'
+                AND tmdb_id IS NOT NULL
+              GROUP BY tmdb_id
+              HAVING COUNT(*) > 1
+            )
+          `)
+          .first(),
+        env.tm_lt_db
+          .prepare(`
+            SELECT
+              r.id,
+              r.status,
+              r.files_found,
+              r.files_added,
+              r.files_updated,
+              r.files_removed,
+              r.started_at,
+              r.finished_at,
+              r.error_message,
+              l.name AS library_name
+            FROM reindex_jobs r
+            LEFT JOIN libraries l
+              ON l.id = r.library_id
+            ORDER BY r.id DESC
+            LIMIT 5
+          `)
+          .all()
+      ]);
+
+    return new Response(
+      JSON.stringify({
+        status: "ok",
+        stats: {
+          libraries: Number(libraryCount?.count || 0),
+          totalMovies: Number(movieStats?.total_movies || 0),
+          visibleMovies: Number(movieStats?.visible_movies || 0),
+          hiddenMovies: Number(movieStats?.hidden_movies || 0),
+          duplicateMovies: Number(duplicateCount?.count || 0)
+        },
+        recentJobs: recentJobs?.results || []
+      }),
+      {
+        status: 200,
+        headers: {
+          "content-type": "application/json; charset=UTF-8",
+          ...CORS_HEADERS
+        }
+      }
+    );
+  } catch (error) {
+    const migrationNeeded = /no such column: is_hidden/i.test(
+      error?.message || ""
+    );
+
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: migrationNeeded
+          ? "Cần áp dụng migration 0003_add_movie_visibility.sql trước."
+          : "Không thể tải tổng quan quản trị."
+      }),
+      {
+        status: 500,
+        headers: {
+          "content-type": "application/json; charset=UTF-8",
+          ...CORS_HEADERS
+        }
+      }
+    );
+  }
+}
 // ---------------------------------------------------------
 // Admin - Trạng thái Reindex tất cả
 // GET /admin/reindex-all/status?libraries=1,2,3
@@ -2937,6 +3855,7 @@ if (
             m.id,
             m.drive_file_id,
             m.drive_name,
+            m.title,
             m.year,
             m.tmdb_id,
             m.tmdb_type,
@@ -3026,6 +3945,465 @@ if (
     );
   }
 }
+// ---------------------------------------------------------
+// Admin - Kiểm tra phim trùng trong kho
+// GET /admin/duplicate-movies
+// Không cần sửa schema D1. Dữ liệu lấy từ movies + libraries.
+// ---------------------------------------------------------
+if (
+  url.pathname === "/admin/duplicate-movies" &&
+  request.method === "GET"
+) {
+  const authorization =
+    request.headers.get("Authorization") || "";
+
+  const match =
+    authorization.match(/^Bearer\s+(.+)$/i);
+
+  if (
+    !match ||
+    !env.REINDEX_SECRET ||
+    match[1].trim() !== env.REINDEX_SECRET
+  ) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Unauthorized"
+      }),
+      {
+        status: 401,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8"
+        }
+      }
+    );
+  }
+
+  try {
+    // Chỉ lấy movie đang active và có TMDB ID.
+    // GROUP BY trong subquery xác định những TMDB ID xuất hiện
+    // từ 2 bản trở lên trong các thư viện hiện tại.
+    const result =
+      await env.tm_lt_db
+        .prepare(`
+          SELECT
+            m.id,
+            m.drive_file_id,
+            m.drive_name,
+            m.drive_size,
+            m.title,
+            m.year,
+            m.tmdb_id,
+            m.tmdb_type,
+            m.library_id,
+            l.name AS library_name,
+            l.folder_id
+          FROM movies m
+          LEFT JOIN libraries l
+            ON l.id = m.library_id
+          WHERE
+            m.is_active = 1
+            AND m.tmdb_type = 'movie'
+            AND m.tmdb_id IS NOT NULL
+            AND m.tmdb_id IN (
+              SELECT tmdb_id
+              FROM movies
+              WHERE
+                is_active = 1
+                AND tmdb_type = 'movie'
+                AND tmdb_id IS NOT NULL
+              GROUP BY tmdb_id
+              HAVING COUNT(*) > 1
+            )
+          ORDER BY
+            m.title COLLATE NOCASE ASC,
+            l.name COLLATE NOCASE ASC,
+            m.drive_name COLLATE NOCASE ASC
+        `)
+        .all();
+
+    const rows = result?.results || [];
+    const duplicateMap = new Map();
+
+    for (const row of rows) {
+      const tmdbId = Number(row.tmdb_id);
+
+      if (!duplicateMap.has(tmdbId)) {
+        duplicateMap.set(tmdbId, {
+          tmdbId,
+          title: row.title || "Không có tên",
+          year: row.year || null,
+          copies: [],
+          totalBytes: 0
+        });
+      }
+
+      const movie = duplicateMap.get(tmdbId);
+      const driveSize =
+        row.drive_size == null
+          ? null
+          : Number(row.drive_size);
+
+      movie.copies.push({
+        movieId: row.id,
+        libraryId: row.library_id,
+        libraryName:
+          row.library_name || "Không xác định",
+        folderId: row.folder_id || null,
+        driveFileId: row.drive_file_id,
+        driveName: row.drive_name || "",
+        driveSize
+      });
+
+      if (Number.isFinite(driveSize) && driveSize > 0) {
+        movie.totalBytes += driveSize;
+      }
+    }
+
+    const duplicateMovies =
+      Array.from(duplicateMap.values())
+        .map(movie => ({
+          ...movie,
+          copyCount: movie.copies.length
+        }))
+        .sort((a, b) =>
+          a.title.localeCompare(
+            b.title,
+            "vi",
+            { sensitivity: "base" }
+          )
+        );
+
+    const duplicateCopyCount =
+      duplicateMovies.reduce(
+        (sum, movie) =>
+          sum + movie.copyCount,
+        0
+      );
+
+    const totalDuplicateBytes =
+      duplicateMovies.reduce(
+        (sum, movie) =>
+          sum + movie.totalBytes,
+        0
+      );
+
+    return new Response(
+      JSON.stringify({
+        status: "ok",
+        duplicateMovieCount:
+          duplicateMovies.length,
+        duplicateCopyCount,
+        totalDuplicateBytes,
+        duplicateMovies
+      }, null, 2),
+      {
+        status: 200,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8",
+          ...CORS_HEADERS
+        }
+      }
+    );
+
+  } catch (error) {
+    console.error(
+      "TM-LT Duplicate Movies error:",
+      error
+    );
+
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message:
+          error?.message ||
+          "Lỗi khi quét phim trùng."
+      }),
+      {
+        status: 500,
+        headers: {
+          "content-type":
+            "application/json; charset=UTF-8",
+          ...CORS_HEADERS
+        }
+      }
+    );
+  }
+}
+
+ // ---------------------------------------------------------
+ // Admin - Ẩn / hiện phim trong thư viện
+ // POST /admin/movie-visibility
+ // Body: { "movieId": 123, "isHidden": true }
+ // ---------------------------------------------------------
+ if (
+  url.pathname === "/admin/movie-visibility" &&
+  request.method === "POST"
+) {
+  const authorization =
+    request.headers.get("Authorization") || "";
+
+  const match =
+    authorization.match(/^Bearer\s+(.+)$/i);
+
+  if (
+    !match ||
+    !env.REINDEX_SECRET ||
+    match[1].trim() !== env.REINDEX_SECRET
+  ) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Unauthorized"
+      }),
+      {
+        status: 401,
+        headers: {
+          "content-type": "application/json; charset=UTF-8",
+          ...CORS_HEADERS
+        }
+      }
+    );
+  }
+
+  try {
+    const body = await request.json();
+    const movieId = Number(body.movieId);
+    const isHidden = body.isHidden;
+
+    if (
+      !Number.isSafeInteger(movieId) ||
+      movieId < 1 ||
+      typeof isHidden !== "boolean"
+    ) {
+      return new Response(
+        JSON.stringify({
+          status: "error",
+          message: "movieId hoặc isHidden không hợp lệ."
+        }),
+        {
+          status: 400,
+          headers: {
+            "content-type": "application/json; charset=UTF-8",
+            ...CORS_HEADERS
+          }
+        }
+      );
+    }
+
+    const result = await env.tm_lt_db
+      .prepare(`
+        UPDATE movies
+        SET
+          is_hidden = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `)
+      .bind(isHidden ? 1 : 0, movieId)
+      .run();
+
+    if (!result.meta?.changes) {
+      return new Response(
+        JSON.stringify({
+          status: "error",
+          message: "Không tìm thấy phim có ID này."
+        }),
+        {
+          status: 404,
+          headers: {
+            "content-type": "application/json; charset=UTF-8",
+            ...CORS_HEADERS
+          }
+        }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        status: "ok",
+        movieId,
+        isHidden,
+        message: isHidden
+          ? "Đã ẩn phim khỏi danh mục."
+          : "Đã hiện phim trong danh mục."
+      }),
+      {
+        status: 200,
+        headers: {
+          "content-type": "application/json; charset=UTF-8",
+          ...CORS_HEADERS
+        }
+      }
+    );
+  } catch (error) {
+    console.error("TM-LT Movie Visibility error:", error);
+
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Không thể cập nhật trạng thái hiển thị phim."
+      }),
+      {
+        status: 500,
+        headers: {
+          "content-type": "application/json; charset=UTF-8",
+          ...CORS_HEADERS
+        }
+      }
+    );
+  }
+}
+
+ // ---------------------------------------------------------
+ // Admin - Danh sách phim để quản lý ẩn / hiện
+ // GET /admin/movies-visibility?q=ten-phim&status=all
+ // ---------------------------------------------------------
+ if (
+  url.pathname === "/admin/movies-visibility" &&
+  request.method === "GET"
+) {
+  const authorization =
+    request.headers.get("Authorization") || "";
+
+  const match =
+    authorization.match(/^Bearer\s+(.+)$/i);
+
+  if (
+    !match ||
+    !env.REINDEX_SECRET ||
+    match[1].trim() !== env.REINDEX_SECRET
+  ) {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Unauthorized"
+      }),
+      {
+        status: 401,
+        headers: {
+          "content-type": "application/json; charset=UTF-8",
+          ...CORS_HEADERS
+        }
+      }
+    );
+  }
+
+  try {
+    const q = (
+      url.searchParams.get("q") || ""
+    ).trim();
+
+    const status = (
+      url.searchParams.get("status") || "all"
+    ).toLowerCase();
+
+    const limit = Math.max(
+      1,
+      Number(url.searchParams.get("limit") || 10000)
+    );
+
+    if (!["all", "visible", "hidden"].includes(status)) {
+      return new Response(
+        JSON.stringify({
+          status: "error",
+          message: "Trạng thái lọc không hợp lệ."
+        }),
+        {
+          status: 400,
+          headers: {
+            "content-type": "application/json; charset=UTF-8",
+            ...CORS_HEADERS
+          }
+        }
+      );
+    }
+
+    const conditions = [
+      "m.is_active = 1",
+      "m.tmdb_id IS NOT NULL"
+    ];
+
+    const params = [];
+
+    if (q) {
+      conditions.push(
+        "(m.title LIKE ? OR m.drive_name LIKE ?)"
+      );
+      const keyword = `%${q}%`;
+      params.push(keyword, keyword);
+    }
+
+    if (status === "visible") {
+      conditions.push("m.is_hidden = 0");
+    } else if (status === "hidden") {
+      conditions.push("m.is_hidden = 1");
+    }
+
+
+    const result = await env.tm_lt_db
+      .prepare(`
+        SELECT
+          m.id,
+          m.title,
+          m.year,
+          m.tmdb_id,
+          m.tmdb_type,
+          m.drive_name,
+          m.is_hidden,
+          m.library_id,
+          l.name AS library_name
+        FROM movies m
+        LEFT JOIN libraries l
+          ON l.id = m.library_id
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY
+          m.title COLLATE NOCASE ASC,
+          m.year DESC
+      `)
+      .bind(...params)
+      .all();
+
+    return new Response(
+      JSON.stringify({
+        status: "ok",
+        count: (result.results || []).length,
+        movies: (result.results || []).map(movie => ({
+          ...movie,
+          is_hidden: Number(movie.is_hidden) === 1
+        }))
+      }, null, 2),
+      {
+        status: 200,
+        headers: {
+          "content-type": "application/json; charset=UTF-8",
+          ...CORS_HEADERS
+        }
+      }
+    );
+  } catch (error) {
+    console.error(
+      "TM-LT Movies Visibility List error:",
+      error
+    );
+
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Không thể tải danh sách phim."
+      }),
+      {
+        status: 500,
+        headers: {
+          "content-type": "application/json; charset=UTF-8",
+          ...CORS_HEADERS
+        }
+      }
+    );
+  }
+}
+
 // ---------------------------------------------------------
 // POST /admin/reindex/:id
 // ---------------------------------------------------------
@@ -5647,6 +7025,7 @@ if (catalogMatch) {
   SELECT MIN(id)
   FROM movies
   WHERE is_active = 1
+    AND is_hidden = 0
     AND tmdb_id IS NOT NULL
     AND tmdb_type = 'movie'
   GROUP BY tmdb_id
@@ -5773,12 +7152,14 @@ if (seriesCatalogMatch) {
                vote_average
              FROM movies
              WHERE is_active = 1
+              AND is_hidden = 0
                AND tmdb_id IS NOT NULL
                AND tmdb_type = 'tv'
                AND id IN (
                  SELECT MIN(id)
                  FROM movies
                  WHERE is_active = 1
+                 AND is_hidden = 0
                    AND tmdb_id IS NOT NULL
                    AND tmdb_type = 'tv'
                  GROUP BY tmdb_id
@@ -6648,6 +8029,7 @@ if (url.pathname.startsWith("/file/")) {
     if (request.method === "HEAD" && driveResponse.body) {
       await driveResponse.body.cancel("HEAD request");
     }
+
     return new Response(
       request.method === "HEAD" ? null : driveResponse.body,
       {
