@@ -6578,6 +6578,27 @@ const streamTitle =
 // Google Drive File Proxy
 // ---------------------------------------------------------
 if (url.pathname.startsWith("/file/")) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...CORS_HEADERS,
+        "Access-Control-Expose-Headers":
+          "Accept-Ranges, Content-Length, Content-Range"
+      }
+    });
+  }
+
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response("Method Not Allowed", {
+      status: 405,
+      headers: {
+        ...CORS_HEADERS,
+        Allow: "GET, HEAD, OPTIONS"
+      }
+    });
+  }
+
   try {
     const fileId =
       decodeURIComponent(
@@ -6601,62 +6622,34 @@ if (url.pathname.startsWith("/file/")) {
         request
       );
 
-    const responseHeaders =
-      new Headers();
+    const responseHeaders = new Headers(CORS_HEADERS);
 
-    const contentType =
-      driveResponse.headers.get(
-        "content-type"
-      );
+    for (const name of [
+      "content-type",
+      "content-length",
+      "content-range",
+      "accept-ranges",
+      "etag",
+      "last-modified",
+      "cache-control"
+    ]) {
+      const value = driveResponse.headers.get(name);
 
-    const contentLength =
-      driveResponse.headers.get(
-        "content-length"
-      );
-
-    const contentRange =
-      driveResponse.headers.get(
-        "content-range"
-      );
-
-    const acceptRanges =
-      driveResponse.headers.get(
-        "accept-ranges"
-      );
-
-    if (contentType) {
-      responseHeaders.set(
-        "content-type",
-        contentType
-      );
+      if (value) {
+        responseHeaders.set(name, value);
+      }
     }
 
-    if (contentLength) {
-      responseHeaders.set(
-        "content-length",
-        contentLength
-      );
-    }
+    responseHeaders.set(
+      "Access-Control-Expose-Headers",
+      "Accept-Ranges, Content-Length, Content-Range"
+    );
 
-    if (contentRange) {
-      responseHeaders.set(
-        "content-range",
-        contentRange
-      );
+    if (request.method === "HEAD" && driveResponse.body) {
+      await driveResponse.body.cancel("HEAD request");
     }
-
-    if (acceptRanges) {
-      responseHeaders.set(
-        "accept-ranges",
-        acceptRanges
-      );
-    }
-responseHeaders.set(
-  "Access-Control-Allow-Origin",
-  "*"
-);
     return new Response(
-      driveResponse.body,
+      request.method === "HEAD" ? null : driveResponse.body,
       {
         status: driveResponse.status,
         headers: responseHeaders
