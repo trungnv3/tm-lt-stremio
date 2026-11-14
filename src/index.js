@@ -8039,11 +8039,35 @@ if (url.pathname.startsWith("/file/")) {
     );
 
   } catch (error) {
+    const errorStatus =
+      Number.isInteger(error?.status) &&
+      error.status >= 400 &&
+      error.status <= 599
+        ? error.status
+        : 500;
+    const errorHeaders = new Headers(CORS_HEADERS);
+
+    errorHeaders.set(
+      "Access-Control-Expose-Headers",
+      "Accept-Ranges, Content-Length, Content-Range, Retry-After"
+    );
+    errorHeaders.set("content-type", "application/json; charset=UTF-8");
+
+    for (const name of ["content-range", "retry-after"]) {
+      const value = error?.headers?.get(name);
+
+      if (value) {
+        errorHeaders.set(name, value);
+      }
+    }
+
     return new Response(
       JSON.stringify(
         {
           status: "error",
-          file: "download_failed",
+          file:
+            error?.code ||
+            "download_failed",
           message:
             error?.message ||
             String(error)
@@ -8052,12 +8076,8 @@ if (url.pathname.startsWith("/file/")) {
         2
       ),
       {
-        status: 500,
-        headers: {
-...CORS_HEADERS,
-          "content-type":
-            "application/json; charset=UTF-8"
-        }
+        status: errorStatus,
+        headers: errorHeaders
       }
     );
   }

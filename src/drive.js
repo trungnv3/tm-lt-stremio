@@ -1,8 +1,23 @@
 const DRIVE_API = "https://www.googleapis.com/drive/v3/files";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const DRIVE_STREAM_CHUNK_BYTES = 8 * 1024 * 1024;
+const TOKEN_REFRESH_SKEW_MS = 60 * 1000;
 
 const ROOT_FOLDER_ID = "14r5XofFHgMxPtxrFXLP6Rwt5dWRpeP9b";
+
+export class DriveStreamError extends Error {
+  constructor(message, {
+    code = "download_failed",
+    headers,
+    status = 502
+  } = {}) {
+    super(message);
+    this.name = "DriveStreamError";
+    this.code = code;
+    this.headers = new Headers(headers);
+    this.status = status;
+  }
+}
 
 function base64UrlEncode(data) {
   let bytes;
@@ -89,7 +104,58 @@ async function createServiceAccountJwt(env) {
   return `${unsignedToken}.${base64UrlEncode(signature)}`;
 }
 
-async function getAccessToken(env) {
+export function createAccessTokenCache({
+  now = () => Date.now(),
+  refreshSkewMs = TOKEN_REFRESH_SKEW_MS
+} = {}) {
+  let cachedToken = null;
+  let pendingToken = null;
+
+  return async function getCachedAccessToken(loadToken) {
+    const currentTime = now();
+
+    if (
+      cachedToken &&
+      cachedToken.expiresAt - refreshSkewMs > currentTime
+    ) {
+      return cachedToken.value;
+    }
+
+    if (pendingToken) {
+      return pendingToken;
+    }
+
+    const nextToken = Promise.resolve()
+      .then(loadToken)
+      .then(({ accessToken, expiresInSeconds }) => {
+        const lifetimeMs =
+          Number(expiresInSeconds) * 1000;
+
+        if (Number.isFinite(lifetimeMs) && lifetimeMs > 0) {
+          cachedToken = {
+            value: accessToken,
+            expiresAt: now() + lifetimeMs
+          };
+        } else {
+          cachedToken = null;
+        }
+
+        return accessToken;
+      });
+
+    pendingToken = nextToken;
+
+    try {
+      return await nextToken;
+    } finally {
+      if (pendingToken === nextToken) {
+        pendingToken = null;
+      }
+    }
+  };
+}
+
+async function requestAccessToken(env) {
   const jwt = await createServiceAccountJwt(env);
 
   const response = await fetch(TOKEN_URL, {
@@ -115,7 +181,22 @@ async function getAccessToken(env) {
 
   const data = await response.json();
 
-  return data.access_token;
+  if (!data.access_token) {
+    throw new Error("Google OAuth response did not include an access token");
+  }
+
+  return {
+    accessToken: data.access_token,
+    expiresInSeconds: data.expires_in
+  };
+}
+
+const getCachedAccessToken = createAccessTokenCache();
+
+async function getAccessToken(env) {
+  return getCachedAccessToken(
+    () => requestAccessToken(env)
+  );
 }
 
 async function listChildren(
@@ -266,19 +347,56 @@ export function parseOpenEndedByteRange(range) {
     return null;
   }
 
-  const match = /^bytes=(\d+)-$/i.exec(range.trim());
+  const normalizedRange = range.trim();
+  const match = /^bytes=(\d+)-$/i.exec(normalizedRange);
 
-  if (!match) {
-    return null;
+  if (match) {
+    const start = Number(match[1]);
+
+    if (!Number.isSafeInteger(start) || start < 0) {
+      throw new DriveStreamError("Invalid byte range", {
+        code: "range_not_satisfiable",
+        status: 416
+      });
+    }
+
+    return start;
   }
 
-  const start = Number(match[1]);
+  // Keep valid bounded, suffix, and multi-range requests on Drive's native
+  // Range path. Reject malformed input before it can become a 500 response.
+  const isValidRange =
+    /^bytes=(?:\d+-\d+|-\d+)(?:\s*,\s*(?:\d+-\d+|-\d+))*$/i
+      .test(normalizedRange);
 
-  if (!Number.isSafeInteger(start) || start < 0) {
-    throw new Error("Invalid byte range");
+  if (!isValidRange) {
+    throw new DriveStreamError("Invalid Range header", {
+      code: "range_not_satisfiable",
+      status: 416
+    });
   }
 
-  return start;
+  const boundedRange = /^bytes=(\d+)-(\d+)$/i.exec(
+    normalizedRange
+  );
+
+  if (boundedRange) {
+    const start = Number(boundedRange[1]);
+    const end = Number(boundedRange[2]);
+
+    if (
+      !Number.isSafeInteger(start) ||
+      !Number.isSafeInteger(end) ||
+      end < start
+    ) {
+      throw new DriveStreamError("Invalid byte range", {
+        code: "range_not_satisfiable",
+        status: 416
+      });
+    }
+  }
+
+  return null;
 }
 
 export function parseContentRange(value) {
@@ -287,7 +405,9 @@ export function parseContentRange(value) {
   );
 
   if (!match) {
-    throw new Error("Drive did not return a valid Content-Range");
+    throw new DriveStreamError(
+      "Drive did not return a valid Content-Range"
+    );
   }
 
   const start = Number(match[1]);
@@ -302,10 +422,69 @@ export function parseContentRange(value) {
     end < start ||
     total <= end
   ) {
-    throw new Error("Drive returned an invalid Content-Range");
+    throw new DriveStreamError(
+      "Drive returned an invalid Content-Range"
+    );
   }
 
   return { start, end, total };
+}
+
+function isQuotaError(body) {
+  try {
+    const payload = JSON.parse(body);
+    const reasons = payload?.error?.errors || [];
+
+    return reasons.some((item) => (
+      [
+        "downloadQuotaExceeded",
+        "rateLimitExceeded",
+        "userRateLimitExceeded"
+      ].includes(item?.reason)
+    ));
+  } catch {
+    return false;
+  }
+}
+
+export function createDriveDownloadError(response, body) {
+  const headers = new Headers();
+  const retryAfter = response.headers.get("retry-after");
+
+  if (retryAfter) {
+    headers.set("retry-after", retryAfter);
+  }
+
+  if (
+    response.status === 429 ||
+    (response.status === 403 && isQuotaError(body))
+  ) {
+    return new DriveStreamError(
+      "Google Drive is temporarily unavailable due to a download quota or rate limit",
+      {
+        code: "drive_temporarily_unavailable",
+        headers,
+        status: 503
+      }
+    );
+  }
+
+  return new DriveStreamError(
+    `Google Drive download failed with status ${response.status}`,
+    {
+      headers,
+      status: response.status === 404 ? 404 : 502
+    }
+  );
+}
+
+async function throwForDriveDownloadFailure(response) {
+  if (response.ok || response.status === 416) {
+    return;
+  }
+
+  const body = (await response.text()).slice(0, 1000);
+  throw createDriveDownloadError(response, body);
 }
 
 function createAbortError() {
@@ -332,12 +511,7 @@ async function fetchDriveRange(
 
   // 416 is a valid answer to an unsatisfied Range request and must be
   // relayed to the player instead of being turned into a misleading 500.
-  if (!response.ok && response.status !== 416) {
-    const text = (await response.text()).slice(0, 1000);
-    throw new Error(
-      `Drive download failed: ${response.status} ${text}`
-    );
-  }
+  await throwForDriveDownloadFailure(response);
 
   return response;
 }
@@ -542,7 +716,7 @@ export function makeChunkedBody({
   });
 }
 
-function createChunkedResponse({
+export function createChunkedResponse({
   firstResponse,
   start,
   end,
@@ -625,12 +799,7 @@ export async function getDriveFileStream(env, fileId, request) {
       signal: request.signal
     });
 
-    if (!response.ok && response.status !== 416) {
-      const text = (await response.text()).slice(0, 1000);
-      throw new Error(
-        `Drive download failed: ${response.status} ${text}`
-      );
-    }
+    await throwForDriveDownloadFailure(response);
 
     return response;
   }
@@ -657,7 +826,9 @@ export async function getDriveFileStream(env, fileId, request) {
   );
 
   if (firstRange.start !== start) {
-    throw new Error("Drive returned a range starting at the wrong byte");
+    throw new DriveStreamError(
+      "Drive returned a range starting at the wrong byte"
+    );
   }
 
   return createChunkedResponse({
